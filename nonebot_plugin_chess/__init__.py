@@ -1,5 +1,6 @@
 import re
 import shlex
+import copy
 from typing import Dict, List
 from dataclasses import dataclass
 from nonebot import on_command, on_shell_command
@@ -138,6 +139,7 @@ async def handle_chess(matcher: Matcher, event: GroupMessageEvent, argv: List[st
             await send('没有找到对应的规则')
 
         rule = rules[options.rule]
+        rule = copy.deepcopy(rule)
         game = Game(rule, options.size)
         game.p1 = new_player(event)
 
@@ -232,7 +234,7 @@ async def handle_chess(matcher: Matcher, event: GroupMessageEvent, argv: List[st
         message += f'，恭喜 {game.p2} 获胜！'
     elif result == MoveResult.DRAW:
         games.pop(cid)
-        message + f'，本局游戏平局'
+        message += f'，本局游戏平局'
     elif isinstance(result, str):
         game.next = player
         await send(f'非法落子（{result}）')
