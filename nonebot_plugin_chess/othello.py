@@ -9,16 +9,16 @@ delta = ((0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1))
 class Othello(Rule):
     def __init__(self):
         super().__init__()
-        self.name = '黑白棋'
+        self.name = "黑白棋"
         self.size = 8
-        self.placement = 'grid'
+        self.placement = "grid"
         self.allow_skip = True
 
     def create(self, game: Game) -> Optional[str]:
         super().create(game)
         size = game.size
         if size % 2 != 0 or size == 2:
-            return '棋盘大小应为 2 的倍数且不小于 4'
+            return "棋盘大小应为 2 的倍数且不小于 4"
         mid = int(size / 2)
         game.set(mid - 1, mid - 1, -1)
         game.set(mid - 1, mid, 1)
@@ -65,9 +65,9 @@ class Othello(Rule):
         b_count = self.total(length, game.b_board)
         w_count = self.total(length, game.w_board)
         sign = lambda a: 1 if a > 0 else -1 if a < 0 else 0
-        return sign(b_count - w_count)
+        return MoveResult(sign(b_count - w_count))
 
-    def update(self, x: int, y: int, value: int) -> MoveResult:
+    def update(self, x: int, y: int, value: int) -> Optional[MoveResult]:
         game = self.game
         diff = self.legal(x, y, value)
         if not diff:

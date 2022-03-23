@@ -7,16 +7,16 @@ from .svg import Svg, SvgOptions
 
 class Rule:
     def __init__(self):
-        self.name: str = ''
+        self.name: str = ""
         self.size: int = 10
-        self.placement: str = 'cross'  # 'grid' or 'cross'
+        self.placement: str = "cross"  # 'grid' or 'cross'
         self.allow_skip: bool = False
         self.allow_repent: bool = True
 
     def create(self, game: "Game") -> Optional[str]:
         self.game = game
 
-    def update(self, x: int, y: int, value: int) -> Union["MoveResult", str]:
+    def update(self, x: int, y: int, value: int) -> Optional[Union["MoveResult", str]]:
         pass
 
 
@@ -41,10 +41,10 @@ class Player:
 
 
 class Game:
-    def __init__(self, rule: Rule, size: int = None):
-        self.p1: Player = None
-        self.p2: Player = None
-        self.next: Player = None
+    def __init__(self, rule: Rule, size: int):
+        self.p1: Optional[Player] = None
+        self.p2: Optional[Player] = None
+        self.next: Optional[Player] = None
 
         self.rule = rule
         self.name = rule.name
@@ -59,7 +59,7 @@ class Game:
         self.history: List[int] = []
         self.full: int = (1 << self.area) - 1
 
-    def update(self, x: int, y: int, value: int) -> Union[MoveResult, str]:
+    def update(self, x: int, y: int, value: int) -> Optional[Union[MoveResult, str]]:
         return self.rule.update(x, y, value)
 
     def get_p_board(self):
@@ -122,44 +122,44 @@ class Game:
         self.w_board = board >> self.area
         self.b_board = board & self.full
 
-    def draw_svg(self, x: int = None, y: int = None):
+    def draw_svg(self, x: Optional[int] = None, y: Optional[int] = None):
         size = self.size
         placement = self.placement
-        view_size = size + (2 if placement == 'cross' else 3)
+        view_size = size + (2 if placement == "cross" else 3)
         svg = Svg(SvgOptions(view_size=view_size, size=max(512, view_size * 32))).fill(
-            'white'
+            "white"
         )
 
         line_group = svg.g(
             {
-                'stroke': 'black',
-                'stroke-width': 0.08,
-                'stroke-linecap': 'round',
+                "stroke": "black",
+                "stroke-width": 0.08,
+                "stroke-linecap": "round",
             }
         )
 
         text_group = svg.g(
             {
-                'font-size': '0.75',
-                'font-weight': 'normal',
-                'style': 'font-family: Sans; letter-spacing: 0',
+                "font-size": "0.75",
+                "font-weight": "normal",
+                "style": "font-family: Sans; letter-spacing: 0",
             }
         )
 
-        top_text_group = text_group.g({'text-anchor': 'middle'})
-        left_text_group = text_group.g({'text-anchor': 'right'})
-        mask_group = svg.g({'fill': 'white'})
-        black_group = svg.g({'fill': 'black'})
+        top_text_group = text_group.g({"text-anchor": "middle"})
+        left_text_group = text_group.g({"text-anchor": "right"})
+        mask_group = svg.g({"fill": "white"})
+        black_group = svg.g({"fill": "black"})
         white_group = svg.g(
             {
-                'fill': 'white',
-                'stroke': 'black',
-                'stroke-width': 0.08,
+                "fill": "white",
+                "stroke": "black",
+                "stroke-width": 0.08,
             }
         )
 
-        vertical_offset = 0.3 if placement == 'cross' else 0.8
-        horizontal_offset = 0 if placement == 'cross' else 0.5
+        vertical_offset = 0.3 if placement == "cross" else 0.8
+        horizontal_offset = 0 if placement == "cross" else 0.5
         for index in range(2, view_size):
             line_group.line(index, 2, index, view_size - 1)
             line_group.line(2, index, view_size - 1, index)
@@ -181,7 +181,7 @@ class Game:
                     continue
 
                 offset = 2.5
-                if placement == 'cross':
+                if placement == "cross":
                     mask_group.rect(j + 1.48, i + 1.48, j + 2.52, i + 2.52)
                     offset = 2
                 white_mark = 0.08
@@ -196,7 +196,7 @@ class Game:
                             cy - black_mark,
                             cx + black_mark,
                             cy + black_mark,
-                            {'fill': 'white'},
+                            {"fill": "white"},
                         )
                 else:
                     white_group.circle(cx, cy, 0.32)
@@ -206,15 +206,15 @@ class Game:
                             cy - white_mark,
                             cx + white_mark,
                             cy + white_mark,
-                            {'fill': 'black'},
+                            {"fill": "black"},
                         )
         return svg
 
-    async def draw(self, x: int = None, y: int = None) -> bytes:
+    async def draw(self, x: Optional[int] = None, y: Optional[int] = None) -> bytes:
         svg = self.draw_svg(x, y)
         async with get_new_page() as page:
             html = f'<html><body style="margin: 0;">{svg.outer()}</body></html>'
             await page.set_content(html)
             return await page.screenshot(
-                clip={'x': 0, 'y': 0, 'width': svg.width, 'height': svg.height}
+                clip={"x": 0, "y": 0, "width": svg.width, "height": svg.height}
             )

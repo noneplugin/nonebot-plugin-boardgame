@@ -1,13 +1,15 @@
+from typing import Optional
+
 from .game import Rule, MoveResult
 
 
 class Gomoku(Rule):
     def __init__(self):
         super().__init__()
-        self.name = '五子棋'
+        self.name = "五子棋"
         self.size = 15
 
-    def update(self, x: int, y: int, value: int) -> MoveResult:
+    def update(self, x: int, y: int, value: int) -> Optional[MoveResult]:
         game = self.game
         size = game.size
         board = game.set(x, y, value)

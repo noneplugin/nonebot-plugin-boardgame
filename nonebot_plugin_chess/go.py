@@ -1,4 +1,4 @@
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 
 from .game import Rule, MoveResult
 
@@ -8,14 +8,14 @@ directions = ((-1, 0), (1, 0), (0, -1), (0, 1))
 class Go(Rule):
     def __init__(self):
         super().__init__()
-        self.name = '围棋'
+        self.name = "围棋"
         self.size = 19
 
     def find_eaten(self, x: int, y: int) -> bool:
         game = self.game
         value = game.get(x, y)
         if not value:
-            return 0
+            return False
         found = 0
 
         def find_life(x: int, y: int) -> bool:
@@ -42,7 +42,7 @@ class Go(Rule):
 
         return False if find_life(x, y) else bool(found)
 
-    def update(self, x: int, y: int, value: int) -> Union[MoveResult, str]:
+    def update(self, x: int, y: int, value: int) -> Optional[Union[MoveResult, str]]:
         game = self.game
         b_board = game.b_board
         w_board = game.w_board
@@ -69,9 +69,9 @@ class Go(Rule):
         elif self.find_eaten(x, y):
             game.b_board = b_board
             game.w_board = w_board
-            return '不入子'
+            return "不入子"
 
         if game.w_board << game.area + game.b_board in game.history:
             game.b_board = b_board
             game.w_board = w_board
-            return '全局同形'
+            return "全局同形"
