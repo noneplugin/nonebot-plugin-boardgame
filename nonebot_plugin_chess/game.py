@@ -115,7 +115,9 @@ class Game:
             return 0
 
     def save(self):
-        self.history.append((self.w_board << self.area) + self.b_board)
+        board = (self.w_board << self.area) + self.b_board
+        if board:
+            self.history.append(board)
 
     def refresh(self):
         board = self.history[-1]

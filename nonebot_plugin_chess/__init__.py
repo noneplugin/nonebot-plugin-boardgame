@@ -1,8 +1,7 @@
 import re
-import copy
 import shlex
 from dataclasses import dataclass
-from typing import Dict, List, Optional, NoReturn
+from typing import Dict, List, Optional, NoReturn, Type
 
 from nonebot.matcher import Matcher
 from nonebot.exception import ParserExit
@@ -19,9 +18,9 @@ from .game import Rule, Game, MoveResult, Player
 __help__plugin_name__ = "chess"
 __des__ = "棋类游戏"
 __cmd__ = """
-输入“五子棋”、“黑白棋”、“围棋”开始一局游戏;
-再输入“落子 字母+数字”下棋，如“落子 A1”;
-输入“结束下棋”结束当前棋局
+@我 + “五子棋”、“黑白棋”、“围棋”开始一局游戏;
+再发送“落子 字母+数字”下棋，如“落子 A1”;
+发送“结束下棋”结束当前棋局
 """.strip()
 __short_cmd__ = "五子棋、黑白棋、围棋"
 __example__ = """
@@ -93,10 +92,10 @@ class Options:
     position: str = ""
 
 
-rules: Dict[str, Rule] = {
-    "go": Go(),
-    "gomoku": Gomoku(),
-    "othello": Othello(),
+rules: Dict[str, Type[Rule]] = {
+    "go": Go,
+    "gomoku": Gomoku,
+    "othello": Othello,
 }
 
 
@@ -140,13 +139,12 @@ async def handle_chess(matcher: Matcher, event: GroupMessageEvent, argv: List[st
             await send("棋盘大小应该为不小于 2，不大于 20 的整数")
 
         if not options.rule:
-            await send("输入“五子棋”、“黑白棋”、“围棋”开始一局游戏。\n再输入“落子 字母+数字”下棋，如“落子 A1”")
+            await send("@我 + “五子棋”、“黑白棋”、“围棋”开始一局游戏。")
 
         if options.rule not in rules:
             await send("没有找到对应的规则")
 
-        rule = rules[options.rule]
-        rule = copy.deepcopy(rule)
+        rule = rules[options.rule]()
         game = Game(rule, options.size)
         game.p1 = new_player(event)
 
@@ -155,8 +153,9 @@ async def handle_chess(matcher: Matcher, event: GroupMessageEvent, argv: List[st
             await send(result)
 
         games[cid] = game
-        game.save()
-        await send(f"{game.p1} 发起了游戏 {game.name}！", await game.draw())
+        await send(
+            f"{game.p1} 发起了游戏 {game.name}！\n发送“落子 字母+数字”下棋，如“落子 A1”", await game.draw()
+        )
 
     if options.stop:
         games.pop(cid)
@@ -166,6 +165,9 @@ async def handle_chess(matcher: Matcher, event: GroupMessageEvent, argv: List[st
 
     if options.show:
         await send(image=await game.draw())
+
+    if options.rule or options.size:
+        await send("当前有正在进行的游戏，可发送“停止下棋”结束游戏")
 
     player = new_player(event)
     if game.p2 and game.p1 != player and game.p2 != player:
@@ -194,16 +196,16 @@ async def handle_chess(matcher: Matcher, event: GroupMessageEvent, argv: List[st
     if game.p2 and player != game.next:
         await send("当前不是你的回合")
 
-    if player == game.p1 and not game.next and len(game.history) > 1:
+    if not game.p2 and game.p1 and player == game.p1 and len(game.history) >= 1:
         await send("当前不是你的回合，请等待新的玩家加入")
 
     position = options.position
     if not position:
-        await send("请输入“落子 坐标”下棋，如“落子 A1”")
+        await send("发送“落子 字母+数字”下棋，如“落子 A1”")
 
     match_obj = re.match(r"^([a-z])(\d+)$", position, re.IGNORECASE)
     if not match_obj:
-        await send("请输入由字母+数字构成的坐标")
+        await send("请发送正确的坐标")
 
     x = (ord(match_obj.group(1).lower()) - ord("a")) % 32
     y = int(match_obj.group(2)) - 1
@@ -215,15 +217,18 @@ async def handle_chess(matcher: Matcher, event: GroupMessageEvent, argv: List[st
         await send("此处已有落子")
 
     message = ""
-    if game.next or player == game.p1:
+    if game.p2:
         message = f"{player} 落子于 {position.upper()}"
     else:
-        if len(game.history) == 1:
-            game.p2 = game.p1
-            game.p1 = player
+        message = f"{player} 加入了游戏并落子于 {position.upper()}"
+        if len(game.history) < 1:
+            if player != game.p1:
+                game.p2 = game.p1
+                game.p1 = player
+            else:
+                message = f"{player} 落子于 {position.upper()}"
         else:
             game.p2 = player
-        message = f"{player} 加入了游戏并落子于 {position.upper()}"
 
     value = 1 if player == game.p1 else -1
     result = game.update(x, y, value)
@@ -246,8 +251,9 @@ async def handle_chess(matcher: Matcher, event: GroupMessageEvent, argv: List[st
         game.next = player
         await send(f"非法落子（{result}）")
     else:
-        game.next = game.p2 if player == game.p1 else game.p1
-        if game.next:
-            message += f"，下一手轮到 {game.next}"
+        if game.p1 and game.p2:
+            game.next = game.p2 if player == game.p1 else game.p1
+            if game.next:
+                message += f"，下一手轮到 {game.next}"
     game.save()
     await send(message, await game.draw(x, y))
