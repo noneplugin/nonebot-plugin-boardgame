@@ -1,5 +1,6 @@
 import re
 import shlex
+from asyncio import Semaphore
 from dataclasses import dataclass
 from typing import Dict, List, Optional, NoReturn, Type
 
@@ -44,12 +45,15 @@ parser.add_argument("position", nargs="?", help="落子位置")
 
 chess = on_shell_command("chess", parser=parser, block=True, priority=13)
 
+mutex = Semaphore(1)
+
 
 @chess.handle()
 async def _(
     matcher: Matcher, event: GroupMessageEvent, argv: List[str] = ShellCommandArgv()
 ):
-    await handle_chess(matcher, event, argv)
+    async with mutex:
+        await handle_chess(matcher, event, argv)
 
 
 def shortcut(cmd: str, argv: List[str] = [], **kwargs):
@@ -63,18 +67,23 @@ def shortcut(cmd: str, argv: List[str] = [], **kwargs):
             args = shlex.split(msg.extract_plain_text().strip())
         except:
             args = []
-        await handle_chess(matcher, event, argv + args)
+        async with mutex:
+            await handle_chess(matcher, event, argv + args)
 
 
-shortcut("下棋", rule=to_me())
+def game_running(event: GroupMessageEvent) -> bool:
+    cid = str(event.group_id)
+    return bool(games.get(cid, None))
+
+
 shortcut("五子棋", ["--rule", "gomoku", "--size", "15"], rule=to_me())
 shortcut("黑白棋", ["--rule", "othello", "--size", "8"], aliases={"奥赛罗"}, rule=to_me())
 shortcut("围棋", ["--rule", "go", "--size", "19"], rule=to_me())
-shortcut("停止下棋", ["--stop"], aliases={"结束下棋", "停止游戏", "结束游戏"})
-shortcut("查看棋盘", ["--show"], aliases={"查看棋局", "显示棋盘", "显示棋局"})
-shortcut("跳过回合", ["--skip"])
-shortcut("悔棋", ["--repent"])
-shortcut("落子")
+shortcut("停止下棋", ["--stop"], aliases={"结束下棋", "停止游戏", "结束游戏"}, rule=game_running)
+shortcut("查看棋盘", ["--show"], aliases={"查看棋局", "显示棋盘", "显示棋局"}, rule=game_running)
+shortcut("跳过回合", ["--skip"], rule=game_running)
+shortcut("悔棋", ["--repent"], rule=game_running)
+shortcut("落子", rule=game_running)
 
 
 def new_player(event: GroupMessageEvent) -> Player:
@@ -126,15 +135,6 @@ async def handle_chess(matcher: Matcher, event: GroupMessageEvent, argv: List[st
 
     cid = str(event.group_id)
     if not games.get(cid, None):
-        if (
-            options.position
-            or options.stop
-            or options.show
-            or options.skip
-            or options.repent
-        ):
-            await send("没有正在进行的游戏")
-
         if options.size and (options.size < 2 or options.size > 20):
             await send("棋盘大小应该为不小于 2，不大于 20 的整数")
 
@@ -142,7 +142,7 @@ async def handle_chess(matcher: Matcher, event: GroupMessageEvent, argv: List[st
             await send("@我 + “五子棋”、“黑白棋”、“围棋”开始一局游戏。")
 
         if options.rule not in rules:
-            await send("没有找到对应的规则")
+            await send("没有找到对应的规则，目前支持：围棋(go)、五子棋(gomoku)、黑白棋(othello)")
 
         rule = rules[options.rule]()
         game = Game(rule, options.size)
