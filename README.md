@@ -28,6 +28,8 @@ pip install nonebot_plugin_chess
 - 围棋（禁全同，暂时不支持点目）
 - 黑白棋
 
+**以下命令需要加[命令前缀](https://v2.nonebot.dev/docs/api/config#Config-command_start) (默认为`/`)，可自行设置为空**
+
 #### 开始和停止棋局
 
 @机器人 发送 “围棋” 或 “五子棋” 或 “黑白棋” 开始一个对应的棋局，一个群组内同时只能有一个棋局。
