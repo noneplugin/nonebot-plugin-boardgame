@@ -1,33 +1,30 @@
-from typing import List, Union, Tuple, Optional
+from typing import List, Tuple, Optional
 
-from .game import Rule, MoveResult
+from .game import Game, MoveResult
 
 directions = ((-1, 0), (1, 0), (0, -1), (0, 1))
 
 
-class Go(Rule):
-    def __init__(self):
-        super().__init__()
-        self.name = "围棋"
-        self.size = 19
+class Go(Game):
+    def __init__(self, size: int = 19):
+        super().__init__("围棋", size)
 
-    def find_eaten(self, x: int, y: int) -> bool:
-        game = self.game
-        value = game.get(x, y)
+    def find_eaten(self, x: int, y: int) -> int:
+        value = self.get(x, y)
         if not value:
             return False
         found = 0
 
         def find_life(x: int, y: int) -> bool:
             nonlocal found
-            found |= game.bit(x, y)
+            found |= self.bit(x, y)
             points: List[Tuple[int, int]] = []
             for (dx, dy) in directions:
                 i = x + dx
                 j = y + dy
-                if not game.in_range(i, j) or found & game.bit(i, j):
+                if not self.in_range(i, j) or (found & self.bit(i, j)):
                     continue
-                next = game.get(i, j)
+                next = self.get(i, j)
                 if not next:
                     return True
                 if next == -value:
@@ -35,43 +32,40 @@ class Go(Rule):
                 if next == value:
                     points.append((i, j))
             for (i, j) in points:
-                result = find_life(i, j)
-                if result:
+                if find_life(i, j):
                     return True
             return False
 
-        return False if find_life(x, y) else bool(found)
+        return 0 if find_life(x, y) else found
 
-    def update(self, x: int, y: int, value: int) -> Optional[Union[MoveResult, str]]:
-        game = self.game
-        b_board = game.b_board
-        w_board = game.w_board
-
-        if value == 1:
-            game.b_board |= game.bit(x, y)
-        else:
-            game.w_board |= game.bit(x, y)
+    def update(self, x: int, y: int) -> Optional[MoveResult]:
+        moveside = self.moveside
+        self.push(x, y)
 
         diff = 0
         for (dx, dy) in directions:
             i = x + dx
             j = y + dy
-            if not game.in_range(i, j):
+            if not self.in_range(i, j):
                 continue
-            if game.get(i, j) == -value:
+            if self.get(i, j) == -moveside:
                 diff |= self.find_eaten(i, j)
 
         if diff:
-            if value == 1:
-                game.w_board ^= diff
+            if moveside == 1:
+                self.w_board ^= diff
             else:
-                game.b_board ^= diff
+                self.b_board ^= diff
         elif self.find_eaten(x, y):
-            game.b_board = b_board
-            game.w_board = w_board
-            return "不入子"
+            self.pop()
+            raise ValueError("不入子")
 
-        if game.w_board << game.area + game.b_board in game.history:
-            game.b_board = b_board
-            game.w_board = w_board
-            return "全局同形"
+        for history in self.history[1:-1]:
+            if (
+                history.b_board
+                and self.b_board == history.b_board
+                and history.w_board
+                and self.w_board == history.w_board
+            ):
+                self.pop()
+                raise ValueError("全局同形")
