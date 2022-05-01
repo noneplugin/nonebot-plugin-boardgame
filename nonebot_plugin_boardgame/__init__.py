@@ -16,7 +16,7 @@ from .gomoku import Gomoku
 from .othello import Othello
 from .game import Rule, Game, MoveResult, Player
 
-__help__plugin_name__ = "chess"
+__help__plugin_name__ = "boardgame"
 __des__ = "棋类游戏"
 __cmd__ = """
 @我 + “五子棋”、“黑白棋”、“围棋”开始一局游戏;
@@ -32,7 +32,7 @@ __example__ = """
 __usage__ = f"{__des__}\nUsage:\n{__cmd__}\nExample:\n{__example__}"
 
 
-parser = ArgumentParser("chess", description="棋类游戏")
+parser = ArgumentParser("boardgame", description="棋类游戏")
 group = parser.add_mutually_exclusive_group()
 group.add_argument("-r", "--rule", help="棋局规则，目前支持：围棋(go)、五子棋(gomoku)、黑白棋/奥赛罗(othello)")
 group.add_argument("-e", "--stop", "--end", action="store_true", help="停止下棋")
@@ -43,17 +43,17 @@ parser.add_argument("-s", "--size", type=int, help="棋盘大小")
 parser.add_argument("position", nargs="?", help="落子位置")
 
 
-chess = on_shell_command("chess", parser=parser, block=True, priority=13)
+boardgame = on_shell_command("boardgame", parser=parser, block=True, priority=13)
 
 mutex = Semaphore(1)
 
 
-@chess.handle()
+@boardgame.handle()
 async def _(
     matcher: Matcher, event: GroupMessageEvent, argv: List[str] = ShellCommandArgv()
 ):
     async with mutex:
-        await handle_chess(matcher, event, argv)
+        await handle_boardgame(matcher, event, argv)
 
 
 def shortcut(cmd: str, argv: List[str] = [], **kwargs):
@@ -68,7 +68,7 @@ def shortcut(cmd: str, argv: List[str] = [], **kwargs):
         except:
             args = []
         async with mutex:
-            await handle_chess(matcher, event, argv + args)
+            await handle_boardgame(matcher, event, argv + args)
 
 
 def game_running(event: GroupMessageEvent) -> bool:
@@ -111,7 +111,7 @@ rules: Dict[str, Type[Rule]] = {
 games: Dict[str, Game] = {}
 
 
-async def handle_chess(matcher: Matcher, event: GroupMessageEvent, argv: List[str]):
+async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: List[str]):
     async def send(
         message: Optional[str] = None, image: Optional[bytes] = None
     ) -> NoReturn:
