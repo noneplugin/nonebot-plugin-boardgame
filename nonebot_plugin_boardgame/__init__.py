@@ -242,7 +242,9 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
         game.pop()
         await send(f"{player} 进行了悔棋", await game.draw())
 
-    if game.player_next and game.player_next != player:
+    if (game.player_next and game.player_next != player) or (
+        game.player_last and game.player_last == player
+    ):
         await send("当前不是你的回合")
 
     position = options.position
