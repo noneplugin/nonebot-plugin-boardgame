@@ -1,4 +1,3 @@
-import re
 import shlex
 import asyncio
 from asyncio import TimerHandle
@@ -15,7 +14,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, MessageSegme
 from .go import Go
 from .gomoku import Gomoku
 from .othello import Othello
-from .game import Game, MoveResult, Player
+from .game import Game, MoveResult, Player, Pos
 
 __help__plugin_name__ = "boardgame"
 __des__ = "棋类游戏"
@@ -251,21 +250,19 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
     if not position:
         await send("发送“落子 字母+数字”下棋，如“落子 A1”")
 
-    match_obj = re.match(r"^([a-z])(\d+)$", position, re.IGNORECASE)
-    if not match_obj:
+    try:
+        pos = Pos.from_str(position)
+    except ValueError:
         await send("请发送正确的坐标")
 
-    x = (ord(match_obj.group(1).lower()) - ord("a")) % 32
-    y = int(match_obj.group(2)) - 1
-
-    if x < 0 or x >= game.size or y < 0 or y >= game.size:
+    if not game.in_range(pos):
         await send("落子超出边界")
 
-    if game.get(x, y):
+    if game.get(pos):
         await send("此处已有落子")
 
     try:
-        result = game.update(x, y)
+        result = game.update(pos)
     except ValueError as e:
         await send(f"非法落子：{e}")
 

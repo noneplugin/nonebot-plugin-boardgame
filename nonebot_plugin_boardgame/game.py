@@ -1,6 +1,7 @@
+import re
 from enum import Enum
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
+from typing import List, Optional
 from nonebot_plugin_htmlrender import html_to_pic
 
 from .svg import Svg, SvgOptions
@@ -32,11 +33,29 @@ class Player:
 
 
 @dataclass
+class Pos:
+    x: int
+    y: int
+
+    @classmethod
+    def from_str(cls, s: str) -> "Pos":
+        match_obj = re.fullmatch(r"([a-z])(\d+)", s, re.IGNORECASE)
+        if match_obj:
+            x = (ord(match_obj.group(1).lower()) - ord("a")) % 32
+            y = int(match_obj.group(2)) - 1
+            return cls(x, y)
+        raise ValueError("坐标格式不合法！")
+
+    def __str__(self) -> str:
+        return chr(self.x + ord("a")) + str(self.y + 1)
+
+
+@dataclass
 class History:
     b_board: int
     w_board: int
     moveside: int
-    last_position: Optional[Tuple[int, int]]
+    last_position: Optional[Pos]
 
 
 class Game:
@@ -59,7 +78,7 @@ class Game:
         self.player_black: Optional[Player] = None
         self.moveside: int = 1
         """1 代表黑方，-1 代表白方"""
-        self.last_position: Optional[Tuple[int, int]] = None
+        self.last_position: Optional[Pos] = None
         self.history: List[History] = []
         self.b_board: int = 0
         self.w_board: int = 0
@@ -67,7 +86,7 @@ class Game:
         self.full: int = (1 << self.area) - 1
         self.save()
 
-    def update(self, x: int, y: int) -> Optional[MoveResult]:
+    def update(self, pos: Pos) -> Optional[MoveResult]:
         raise NotImplementedError
 
     @property
@@ -81,22 +100,22 @@ class Game:
     def is_full(self):
         return not ((self.b_board | self.w_board) ^ self.full)
 
-    def bit(self, x: int, y: int) -> int:
-        return 1 << (x * self.size + y)
+    def bit(self, pos: Pos) -> int:
+        return 1 << (pos.x * self.size + pos.y)
 
-    def in_range(self, x: int, y: int) -> bool:
-        return x >= 0 and y >= 0 and x < self.size and y < self.size
+    def in_range(self, pos: Pos) -> bool:
+        return pos.x >= 0 and pos.y >= 0 and pos.x < self.size and pos.y < self.size
 
-    def get(self, x: int, y: int) -> int:
-        bit = self.bit(x, y)
+    def get(self, pos: Pos) -> int:
+        bit = self.bit(pos)
         if self.b_board & bit:
             return 1
         if self.w_board & bit:
             return -1
         return 0
 
-    def set(self, x: int, y: int, value: int):
-        bit = self.bit(x, y)
+    def set(self, pos: Pos, value: int):
+        bit = self.bit(pos)
         if value == 1:
             self.w_board &= ~bit
             self.b_board |= bit
@@ -107,10 +126,10 @@ class Game:
             self.w_board &= ~bit
             self.b_board &= ~bit
 
-    def push(self, x: int, y: int):
-        self.set(x, y, self.moveside)
+    def push(self, pos: Pos):
+        self.set(pos, self.moveside)
         self.moveside = -self.moveside
-        self.last_position = (x, y)
+        self.last_position = pos
         self.save()
 
     def save(self):
@@ -178,7 +197,7 @@ class Game:
 
         for i in range(size):
             for j in range(size):
-                value = self.get(i, j)
+                value = self.get(Pos(i, j))
                 if not value:
                     if (
                         size >= 13
@@ -199,9 +218,9 @@ class Game:
                 cy = i + offset
                 if value == 1:
                     black_group.circle(cx, cy, 0.36)
-                    if self.last_position:
-                        x, y = self.last_position
-                        if x == i and y == j:
+                    pos = self.last_position
+                    if pos:
+                        if pos.x == i and pos.y == j:
                             black_group.rect(
                                 cx - black_mark,
                                 cy - black_mark,
@@ -211,9 +230,9 @@ class Game:
                             )
                 else:
                     white_group.circle(cx, cy, 0.32)
-                    if self.last_position:
-                        x, y = self.last_position
-                        if x == i and y == j:
+                    pos = self.last_position
+                    if pos:
+                        if pos.x == i and pos.y == j:
                             white_group.rect(
                                 cx - white_mark,
                                 cy - white_mark,
