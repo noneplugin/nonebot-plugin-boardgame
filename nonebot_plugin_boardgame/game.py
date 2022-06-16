@@ -175,6 +175,7 @@ class Game:
                 record = GameRecord()
             record.id = self.id
             record.session_id = session_id
+            record.name = self.name
             if self.player_black:
                 record.player_black_id = str(self.player_black.id)
                 record.player_black_name = self.player_black.name
@@ -191,6 +192,11 @@ class Game:
 
     @classmethod
     async def load_record(cls, session_id: str):
+        def load_player(id: str, name: str) -> Optional[Player]:
+            if not id:
+                return None
+            return Player(int(id), name)
+
         statement = select(GameRecord).where(
             GameRecord.session_id == session_id, GameRecord.name == cls.name
         )
@@ -203,11 +209,11 @@ class Game:
             return None
         game = cls()
         game.id = record.id
-        game.player_black = Player(
-            int(record.player_black_id), record.player_black_name
+        game.player_black = load_player(
+            record.player_black_id, record.player_black_name
         )
-        game.player_white = Player(
-            int(record.player_white_id), record.player_white_name
+        game.player_white = load_player(
+            record.player_white_id, record.player_white_name
         )
         game.start_time = record.start_time
         game.update_time = record.update_time

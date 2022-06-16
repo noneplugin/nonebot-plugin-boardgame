@@ -9,7 +9,12 @@ from nonebot.rule import ArgumentParser
 from nonebot.exception import ParserExit
 from nonebot import on_command, on_shell_command
 from nonebot.params import ShellCommandArgv, Command, CommandArg, RawCommand
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, MessageSegment
+from nonebot.adapters.onebot.v11 import (
+    MessageEvent,
+    GroupMessageEvent,
+    Message,
+    MessageSegment,
+)
 
 from .go import Go
 from .gomoku import Gomoku
@@ -21,7 +26,7 @@ __des__ = "棋类游戏"
 __cmd__ = """
 @我 + “五子棋”、“黑白棋”、“围棋”开始一局游戏;
 再发送“落子 字母+数字”下棋，如“落子 A1”;
-发送“结束下棋”结束当前棋局
+发送“结束下棋”结束当前棋局；发送“显示棋盘”显示当前棋局
 """.strip()
 __short_cmd__ = "五子棋、黑白棋、围棋"
 __example__ = """
@@ -33,8 +38,8 @@ __usage__ = f"{__des__}\nUsage:\n{__cmd__}\nExample:\n{__example__}"
 
 
 parser = ArgumentParser("boardgame", description="棋类游戏")
+parser.add_argument("-r", "--rule", help="棋局规则")
 group = parser.add_mutually_exclusive_group()
-group.add_argument("-r", "--rule", help="棋局规则，目前支持：围棋(go)、五子棋(gomoku)、黑白棋/奥赛罗(othello)")
 group.add_argument("-e", "--stop", "--end", action="store_true", help="停止下棋")
 group.add_argument("-v", "--show", "--view", action="store_true", help="显示棋盘")
 group.add_argument("--skip", action="store_true", help="跳过回合")
@@ -68,8 +73,16 @@ def shortcut(cmd: str, argv: List[str] = [], **kwargs):
         await handle_boardgame(matcher, event, argv + args)
 
 
+def get_cid(event: MessageEvent):
+    return (
+        f"group_{event.group_id}"
+        if isinstance(event, GroupMessageEvent)
+        else f"private_{event.user_id}"
+    )
+
+
 def game_running(event: GroupMessageEvent) -> bool:
-    cid = str(event.group_id)
+    cid = get_cid(event)
     return bool(games.get(cid, None))
 
 
@@ -155,7 +168,7 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
 
     options = Options(**vars(args))
 
-    cid = str(event.group_id)
+    cid = get_cid(event)
     if not games.get(cid, None):
         if options.stop or options.show or options.repent or options.skip:
             await send("没有正在进行的游戏")
