@@ -6,8 +6,10 @@ directions = ((-1, 0), (1, 0), (0, -1), (0, 1))
 
 
 class Go(Game):
-    def __init__(self, size: int = 19):
-        super().__init__("围棋", size)
+    name: str = "围棋"
+
+    def __init__(self):
+        super().__init__(size=19)
 
     def find_eaten(self, pos: Pos) -> int:
         value = self.get(pos)

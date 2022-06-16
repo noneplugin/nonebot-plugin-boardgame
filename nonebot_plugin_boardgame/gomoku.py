@@ -4,8 +4,10 @@ from .game import Game, MoveResult, Pos
 
 
 class Gomoku(Game):
-    def __init__(self, size: int = 15):
-        super().__init__("五子棋", size)
+    name: str = "五子棋"
+
+    def __init__(self):
+        super().__init__(size=15)
 
     def update(self, pos: Pos) -> Optional[MoveResult]:
         size = self.size

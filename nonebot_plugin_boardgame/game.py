@@ -1,10 +1,17 @@
 import re
+import uuid
 from enum import Enum
+from sqlmodel import select
+from datetime import datetime
 from dataclasses import dataclass
 from typing import List, Optional
+from sqlalchemy.exc import SQLAlchemyError
+
 from nonebot_plugin_htmlrender import html_to_pic
+from nonebot_plugin_datastore import create_session
 
 from .svg import Svg, SvgOptions
+from .model import GameRecord
 
 
 class MoveResult(Enum):
@@ -39,6 +46,8 @@ class Pos:
 
     @classmethod
     def from_str(cls, s: str) -> "Pos":
+        if s == "null":
+            return cls.null()
         match_obj = re.fullmatch(r"([a-z])(\d+)", s, re.IGNORECASE)
         if match_obj:
             x = (ord(match_obj.group(1).lower()) - ord("a")) % 32
@@ -46,7 +55,13 @@ class Pos:
             return cls(x, y)
         raise ValueError("坐标格式不合法！")
 
+    @classmethod
+    def null(cls) -> "Pos":
+        return cls(-1, -1)
+
     def __str__(self) -> str:
+        if self.x < 0 or self.y < 0:
+            return "null"
         return chr(self.x + ord("a")) + str(self.y + 1)
 
 
@@ -59,25 +74,30 @@ class History:
 
 
 class Game:
+    name: str = ""
+
     def __init__(
         self,
-        name: str,
-        size: int,
+        size: int = 0,
         placement: Placement = Placement.CROSS,
         allow_skip: bool = False,
         allow_repent: bool = True,
     ):
-        self.name: str = name
         self.size: int = size
         self.placement: Placement = placement
         self.allow_skip: bool = allow_skip
         self.allow_repent: bool = allow_repent
 
-    def setup(self):
+        self.id = uuid.uuid4().hex
+        self.start_time = datetime.now()
+        self.update_time = datetime.now()
+        self.is_game_over = False
         self.player_white: Optional[Player] = None
         self.player_black: Optional[Player] = None
+
         self.moveside: int = 1
         """1 代表黑方，-1 代表白方"""
+        self.positions: List[Pos] = []
         self.last_position: Optional[Pos] = None
         self.history: List[History] = []
         self.b_board: int = 0
@@ -127,8 +147,10 @@ class Game:
             self.b_board &= ~bit
 
     def push(self, pos: Pos):
-        self.set(pos, self.moveside)
+        if self.in_range(pos):
+            self.set(pos, self.moveside)
         self.moveside = -self.moveside
+        self.positions.append(pos)
         self.last_position = pos
         self.save()
 
@@ -143,6 +165,56 @@ class Game:
         self.w_board = history.w_board
         self.moveside = history.moveside
         self.last_position = history.last_position
+
+    async def save_record(self, session_id: str):
+        statement = select(GameRecord).where(GameRecord.id == self.id)
+        async with create_session() as session:
+            try:
+                record: GameRecord = (await session.exec(statement)).one()  # type: ignore
+            except SQLAlchemyError:
+                record = GameRecord()
+            record.id = self.id
+            record.session_id = session_id
+            if self.player_black:
+                record.player_black_id = str(self.player_black.id)
+                record.player_black_name = self.player_black.name
+            if self.player_white:
+                record.player_white_id = str(self.player_white.id)
+                record.player_white_name = self.player_white.name
+            record.start_time = self.start_time
+            self.update_time = datetime.now()
+            record.update_time = self.update_time
+            record.positions = " ".join((str(pos) for pos in self.positions))
+            record.is_game_over = self.is_game_over
+            session.add(record)
+            await session.commit()
+
+    @classmethod
+    async def load_record(cls, session_id: str):
+        statement = select(GameRecord).where(
+            GameRecord.session_id == session_id, GameRecord.name == cls.name
+        )
+        async with create_session() as session:
+            records: List[GameRecord] = (await session.exec(statement)).all()  # type: ignore
+        if not records:
+            return None
+        record = sorted(records, key=lambda x: x.update_time)[-1]
+        if record.is_game_over:
+            return None
+        game = cls()
+        game.id = record.id
+        game.player_black = Player(
+            int(record.player_black_id), record.player_black_name
+        )
+        game.player_white = Player(
+            int(record.player_white_id), record.player_white_name
+        )
+        game.start_time = record.start_time
+        game.update_time = record.update_time
+        positions = [Pos.from_str(pos) for pos in record.positions.split(" ")]
+        for pos in positions:
+            game.update(pos)
+        return game
 
     def draw_svg(self):
         size = self.size

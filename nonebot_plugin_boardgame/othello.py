@@ -7,19 +7,19 @@ delta = ((0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1))
 
 
 class Othello(Game):
-    def __init__(self, size: int = 8):
-        super().__init__("黑白棋", size, placement=Placement.GRID, allow_skip=True)
+    name: str = "黑白棋"
 
-    def setup(self):
-        size = self.size
-        if size % 2 != 0 or size == 2:
-            raise ValueError("棋盘大小应为 2 的倍数且不小于 4")
-        super().setup()
+    def __init__(self):
+        size = 8
+        super().__init__(size, placement=Placement.GRID, allow_skip=True)
+
         mid = int(size / 2)
         self.set(Pos(mid - 1, mid - 1), -1)
         self.set(Pos(mid - 1, mid), 1)
         self.set(Pos(mid, mid - 1), 1)
         self.set(Pos(mid, mid), -1)
+        self.history.pop()
+        self.save()
 
     def legal(self, pos: Pos, value: int) -> int:
         diff = 0
@@ -60,6 +60,9 @@ class Othello(Game):
         return MoveResult(sign(b_count - w_count))
 
     def update(self, pos: Pos) -> Optional[MoveResult]:
+        if not self.in_range(pos):
+            self.push(pos)
+            return MoveResult.SKIP
         moveside = self.moveside
         diff = self.legal(pos, moveside)
         if not diff:
