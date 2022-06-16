@@ -210,12 +210,17 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
             f"{player} 发起了游戏 {game.name}！\n发送“落子 字母+数字”下棋，如“落子 A1”", await game.draw()
         )
 
-    if options.stop:
-        game = games.pop(cid)
-        await send(f"游戏已结束，可发送“重载{game.name}棋局”继续下棋")
-
     game = games[cid]
     set_timeout(matcher, cid)
+    player = new_player(event)
+
+    if options.stop:
+        if (not game.player_white or game.player_white != player) and (
+            not game.player_black or game.player_black != player
+        ):
+            await send("只有游戏参与者才能结束游戏")
+        game = games.pop(cid)
+        await send(f"游戏已结束，可发送“重载{game.name}棋局”继续下棋")
 
     if options.show:
         await send(image=await game.draw())
@@ -223,7 +228,6 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
     if options.rule:
         await send("当前有正在进行的游戏，可发送“停止下棋”结束游戏")
 
-    player = new_player(event)
     if (
         game.player_black
         and game.player_white
