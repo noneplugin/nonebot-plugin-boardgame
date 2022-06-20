@@ -8,7 +8,7 @@ from nonebot.matcher import Matcher
 from nonebot.rule import ArgumentParser
 from nonebot.exception import ParserExit
 from nonebot.plugin import PluginMetadata
-from nonebot import on_command, on_shell_command
+from nonebot import on_command, on_shell_command, require
 from nonebot.params import ShellCommandArgv, Command, CommandArg, RawCommand
 from nonebot.adapters.onebot.v11 import (
     MessageEvent,
@@ -22,6 +22,9 @@ from .gomoku import Gomoku
 from .othello import Othello
 from .game import Game, MoveResult, Player, Pos
 
+require("nonebot_plugin_htmlrender")
+require("nonebot_plugin_datastore")
+
 __plugin_meta__ = PluginMetadata(
     name="棋类游戏",
     description="五子棋、黑白棋、围棋",
@@ -34,7 +37,7 @@ __plugin_meta__ = PluginMetadata(
         "unique_name": "boardgame",
         "example": "@小Q 五子棋\n落子 G8\n结束下棋",
         "author": "meetwq <meetwq@gmail.com>",
-        "version": "0.1.3",
+        "version": "0.1.4",
     },
 )
 
