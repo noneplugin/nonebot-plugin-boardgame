@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, NoReturn, Tuple
 from nonebot.matcher import Matcher
 from nonebot.rule import ArgumentParser
 from nonebot.exception import ParserExit
+from nonebot.plugin import PluginMetadata
 from nonebot import on_command, on_shell_command
 from nonebot.params import ShellCommandArgv, Command, CommandArg, RawCommand
 from nonebot.adapters.onebot.v11 import (
@@ -21,20 +22,21 @@ from .gomoku import Gomoku
 from .othello import Othello
 from .game import Game, MoveResult, Player, Pos
 
-__help__plugin_name__ = "boardgame"
-__des__ = "棋类游戏"
-__cmd__ = """
-@我 + “五子棋”、“黑白棋”、“围棋”开始一局游戏;
-再发送“落子 字母+数字”下棋，如“落子 A1”;
-发送“结束下棋”结束当前棋局；发送“显示棋盘”显示当前棋局
-""".strip()
-__short_cmd__ = "五子棋、黑白棋、围棋"
-__example__ = """
-@小Q 五子棋
-落子 G8
-结束下棋
-""".strip()
-__usage__ = f"{__des__}\nUsage:\n{__cmd__}\nExample:\n{__example__}"
+__plugin_meta__ = PluginMetadata(
+    name="棋类游戏",
+    description="五子棋、黑白棋、围棋",
+    usage=(
+        "@我 + “五子棋”、“黑白棋”、“围棋”开始一局游戏;\n"
+        "再发送“落子 字母+数字”下棋，如“落子 A1”;\n"
+        "发送“结束下棋”结束当前棋局；发送“显示棋盘”显示当前棋局"
+    ),
+    extra={
+        "unique_name": "boardgame",
+        "example": "@小Q 五子棋\n落子 G8\n结束下棋",
+        "author": "meetwq <meetwq@gmail.com>",
+        "version": "0.1.3",
+    },
+)
 
 
 parser = ArgumentParser("boardgame", description="棋类游戏")
@@ -163,7 +165,7 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
         args = parser.parse_args(argv)
     except ParserExit as e:
         if e.status == 0:
-            await send(__usage__)
+            await send(__plugin_meta__.usage)
         await send()
 
     options = Options(**vars(args))
