@@ -17,13 +17,13 @@ from nonebot.adapters.onebot.v11 import (
     MessageSegment,
 )
 
+require("nonebot_plugin_htmlrender")
+require("nonebot_plugin_datastore")
+
 from .go import Go
 from .gomoku import Gomoku
 from .othello import Othello
 from .game import Game, MoveResult, Player, Pos
-
-require("nonebot_plugin_htmlrender")
-require("nonebot_plugin_datastore")
 
 __plugin_meta__ = PluginMetadata(
     name="棋类游戏",
@@ -37,7 +37,7 @@ __plugin_meta__ = PluginMetadata(
         "unique_name": "boardgame",
         "example": "@小Q 五子棋\n落子 G8\n结束下棋",
         "author": "meetwq <meetwq@gmail.com>",
-        "version": "0.1.4",
+        "version": "0.1.5",
     },
 )
 
