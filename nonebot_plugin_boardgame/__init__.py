@@ -37,7 +37,7 @@ __plugin_meta__ = PluginMetadata(
         "unique_name": "boardgame",
         "example": "@小Q 五子棋\n落子 G8\n结束下棋",
         "author": "meetwq <meetwq@gmail.com>",
-        "version": "0.1.5",
+        "version": "0.1.6",
     },
 )
 
@@ -194,7 +194,7 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
         if options.reload:
             game = await Game.load_record(cid)
             if not game:
-                await matcher.finish("没有找到未结束的游戏")
+                await matcher.finish("没有找到被中断的游戏")
             games[cid] = game
             await send(
                 f"游戏发起时间：{game.start_time.strftime('%Y-%m-%d %H:%M:%S')}\n黑方：{game.player_black}\n白方：{game.player_white}\n下一手轮到：{game.player_next}",
@@ -247,6 +247,7 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
         if game.player_next and game.player_next != player:
             await send("当前不是你的回合")
         game.update(Pos.null())
+        await game.save_record(cid)
         msg = f"{player} 选择跳过其回合"
         if game.player_next:
             msg += f"，下一手轮到 {game.player_next}"
@@ -258,6 +259,7 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
         if game.player_last and game.player_last != player:
             await send("上一手棋不是你所下")
         game.pop()
+        await game.save_record(cid)
         await send(f"{player} 进行了悔棋", await game.draw())
 
     if (game.player_next and game.player_next != player) or (

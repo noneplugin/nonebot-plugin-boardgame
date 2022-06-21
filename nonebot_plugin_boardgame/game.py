@@ -5,7 +5,6 @@ from sqlmodel import select
 from datetime import datetime
 from dataclasses import dataclass
 from typing import List, Optional
-from sqlalchemy.exc import SQLAlchemyError
 
 from nonebot_plugin_htmlrender import html_to_pic
 from nonebot_plugin_datastore import create_session
@@ -70,7 +69,6 @@ class History:
     b_board: int
     w_board: int
     moveside: int
-    last_position: Optional[Pos]
 
 
 class Game:
@@ -98,7 +96,6 @@ class Game:
         self.moveside: int = 1
         """1 代表黑方，-1 代表白方"""
         self.positions: List[Pos] = []
-        self.last_position: Optional[Pos] = None
         self.history: List[History] = []
         self.b_board: int = 0
         self.w_board: int = 0
@@ -151,31 +148,26 @@ class Game:
             self.set(pos, self.moveside)
         self.moveside = -self.moveside
         self.positions.append(pos)
-        self.last_position = pos
         self.save()
 
     def save(self):
-        history = History(self.b_board, self.w_board, self.moveside, self.last_position)
+        history = History(self.b_board, self.w_board, self.moveside)
         self.history.append(history)
 
     def pop(self):
         self.history.pop()
+        self.positions.pop()
         history = self.history[-1]
         self.b_board = history.b_board
         self.w_board = history.w_board
         self.moveside = history.moveside
-        self.last_position = history.last_position
 
     async def save_record(self, session_id: str):
         statement = select(GameRecord).where(GameRecord.id == self.id)
         async with create_session() as session:
-            try:
-                record: GameRecord = (await session.exec(statement)).one()  # type: ignore
-            except SQLAlchemyError:
-                record = GameRecord()
-            record.id = self.id
-            record.session_id = session_id
-            record.name = self.name
+            record: Optional[GameRecord] = await session.scalar(statement)
+            if not record:
+                record = GameRecord(id=self.id, session_id=session_id, name=self.name)
             if self.player_black:
                 record.player_black_id = str(self.player_black.id)
                 record.player_black_name = self.player_black.name
@@ -198,15 +190,15 @@ class Game:
             return Player(int(id), name)
 
         statement = select(GameRecord).where(
-            GameRecord.session_id == session_id, GameRecord.name == cls.name
+            GameRecord.session_id == session_id,
+            GameRecord.name == cls.name,
+            GameRecord.is_game_over == False,
         )
         async with create_session() as session:
             records: List[GameRecord] = (await session.exec(statement)).all()  # type: ignore
         if not records:
             return None
         record = sorted(records, key=lambda x: x.update_time)[-1]
-        if record.is_game_over:
-            return None
         game = cls()
         game.id = record.id
         game.player_black = load_player(
@@ -296,8 +288,8 @@ class Game:
                 cy = i + offset
                 if value == 1:
                     black_group.circle(cx, cy, 0.36)
-                    pos = self.last_position
-                    if pos:
+                    if self.positions:
+                        pos = self.positions[-1]
                         if pos.x == i and pos.y == j:
                             black_group.rect(
                                 cx - black_mark,
@@ -308,8 +300,8 @@ class Game:
                             )
                 else:
                     white_group.circle(cx, cy, 0.32)
-                    pos = self.last_position
-                    if pos:
+                    if self.positions:
+                        pos = self.positions[-1]
                         if pos.x == i and pos.y == j:
                             white_group.rect(
                                 cx - white_mark,
