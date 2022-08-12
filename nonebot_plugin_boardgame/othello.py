@@ -24,7 +24,7 @@ class Othello(Game):
     def legal(self, pos: Pos, value: int) -> int:
         diff = 0
         for (dx, dy) in delta:
-            p = Pos(pos.x + dx, Pos.y + dy)
+            p = Pos(pos.x + dx, pos.y + dy)
             if not self.in_range(p) or self.get(p) != -value:
                 continue
             temp = 0
