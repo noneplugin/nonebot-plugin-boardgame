@@ -37,7 +37,7 @@ __plugin_meta__ = PluginMetadata(
         "unique_name": "boardgame",
         "example": "@小Q 五子棋\n落子 G8\n结束下棋",
         "author": "meetwq <meetwq@gmail.com>",
-        "version": "0.1.7",
+        "version": "0.1.8",
     },
 )
 
