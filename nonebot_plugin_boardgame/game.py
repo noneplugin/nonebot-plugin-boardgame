@@ -27,7 +27,7 @@ class Placement(Enum):
 
 
 class Player:
-    def __init__(self, id: int, name: str):
+    def __init__(self, id: str, name: str):
         self.id = id
         self.name = name
 
@@ -189,7 +189,7 @@ class Game:
         def load_player(id: str, name: str) -> Optional[Player]:
             if not id:
                 return None
-            return Player(int(id), name)
+            return Player(id, name)
 
         statement = select(GameRecord).where(
             GameRecord.session_id == session_id,

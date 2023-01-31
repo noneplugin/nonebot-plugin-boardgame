@@ -2,23 +2,32 @@ import shlex
 import asyncio
 from asyncio import TimerHandle
 from dataclasses import dataclass
-from typing import Dict, List, Optional, NoReturn, Tuple
+from typing import Dict, List, Optional, NoReturn, Union
 
 from nonebot.matcher import Matcher
-from nonebot.rule import ArgumentParser
 from nonebot.exception import ParserExit
 from nonebot.plugin import PluginMetadata
+from nonebot.rule import Rule, ArgumentParser
 from nonebot import on_command, on_shell_command, require
-from nonebot.params import ShellCommandArgv, Command, CommandArg, RawCommand
-from nonebot.adapters.onebot.v11 import (
-    MessageEvent,
-    GroupMessageEvent,
-    Message,
-    MessageSegment,
-)
+from nonebot.params import EventToMe, CommandArg, CommandStart, ShellCommandArgv
 
-require("nonebot_plugin_htmlrender")
+from nonebot.adapters.onebot.v11 import Bot as V11Bot
+from nonebot.adapters.onebot.v11 import Message as V11Msg
+from nonebot.adapters.onebot.v11 import MessageSegment as V11MsgSeg
+from nonebot.adapters.onebot.v11 import MessageEvent as V11MEvent
+from nonebot.adapters.onebot.v11 import GroupMessageEvent as V11GMEvent
+from nonebot.adapters.onebot.v11 import PrivateMessageEvent as V11PMEvent
+
+from nonebot.adapters.onebot.v12 import Bot as V12Bot
+from nonebot.adapters.onebot.v12 import Message as V12Msg
+from nonebot.adapters.onebot.v12 import MessageSegment as V12MsgSeg
+from nonebot.adapters.onebot.v12 import MessageEvent as V12MEvent
+from nonebot.adapters.onebot.v12 import GroupMessageEvent as V12GMEvent
+from nonebot.adapters.onebot.v12 import PrivateMessageEvent as V12PMEvent
+from nonebot.adapters.onebot.v12 import ChannelMessageEvent as V12CMEvent
+
 require("nonebot_plugin_datastore")
+require("nonebot_plugin_htmlrender")
 
 from .go import Go
 from .gomoku import Gomoku
@@ -37,7 +46,7 @@ __plugin_meta__ = PluginMetadata(
         "unique_name": "boardgame",
         "example": "@小Q 五子棋\n落子 G8\n结束下棋",
         "author": "meetwq <meetwq@gmail.com>",
-        "version": "0.1.8",
+        "version": "0.2.0",
     },
 )
 
@@ -59,9 +68,12 @@ boardgame = on_shell_command("boardgame", parser=parser, block=True, priority=13
 
 @boardgame.handle()
 async def _(
-    matcher: Matcher, event: GroupMessageEvent, argv: List[str] = ShellCommandArgv()
+    bot: Union[V11Bot, V12Bot],
+    matcher: Matcher,
+    event: Union[V11MEvent, V12MEvent],
+    argv: List[str] = ShellCommandArgv(),
 ):
-    await handle_boardgame(matcher, event, argv)
+    await handle_boardgame(bot, matcher, event, argv)
 
 
 def shortcut(cmd: str, argv: List[str] = [], **kwargs):
@@ -69,40 +81,55 @@ def shortcut(cmd: str, argv: List[str] = [], **kwargs):
 
     @command.handle()
     async def _(
-        matcher: Matcher, event: GroupMessageEvent, msg: Message = CommandArg()
+        bot: Union[V11Bot, V12Bot],
+        matcher: Matcher,
+        event: Union[V11MEvent, V12MEvent],
+        msg: Union[V11Msg, V12Msg] = CommandArg(),
     ):
         try:
             args = shlex.split(msg.extract_plain_text().strip())
         except:
             args = []
-        await handle_boardgame(matcher, event, argv + args)
+        await handle_boardgame(bot, matcher, event, argv + args)
 
 
-def get_cid(event: MessageEvent):
-    return (
-        f"group_{event.group_id}"
-        if isinstance(event, GroupMessageEvent)
-        else f"private_{event.user_id}"
-    )
+def get_cid(bot: Union[V11Bot, V12Bot], event: Union[V11MEvent, V12MEvent]):
+    if isinstance(event, V11MEvent):
+        cid = f"{bot.self_id}_{event.sub_type}_"
+    else:
+        cid = f"{bot.self_id}_{event.detail_type}_"
+
+    if isinstance(event, V11GMEvent) or isinstance(event, V12GMEvent):
+        cid += str(event.group_id)
+    elif isinstance(event, V12CMEvent):
+        cid += f"{event.guild_id}_{event.channel_id}"
+    else:
+        cid += str(event.user_id)
+
+    return cid
 
 
-def game_running(event: GroupMessageEvent) -> bool:
-    cid = get_cid(event)
+def game_running(
+    bot: Union[V11Bot, V12Bot], event: Union[V11MEvent, V12MEvent]
+) -> bool:
+    cid = get_cid(bot, event)
     return bool(games.get(cid, None))
 
 
 # 命令前缀为空则需要to_me，否则不需要
-def smart_to_me(
-    event: GroupMessageEvent,
-    cmd: Tuple[str, ...] = Command(),
-    raw_cmd: str = RawCommand(),
-) -> bool:
-    return not raw_cmd.startswith(cmd[0]) or event.is_tome()
+def smart_to_me(command_start: str = CommandStart(), to_me: bool = EventToMe()) -> bool:
+    return bool(command_start) or to_me
 
 
-shortcut("五子棋", ["--rule", "gomoku"], rule=smart_to_me)
-shortcut("黑白棋", ["--rule", "othello"], aliases={"奥赛罗"}, rule=smart_to_me)
-shortcut("围棋", ["--rule", "go"], rule=smart_to_me)
+def not_private(event: Union[V11MEvent, V12MEvent]) -> bool:
+    return not (isinstance(event, V11PMEvent) or isinstance(event, V12PMEvent))
+
+
+shortcut("五子棋", ["--rule", "gomoku"], rule=Rule(smart_to_me) & not_private)
+shortcut(
+    "黑白棋", ["--rule", "othello"], aliases={"奥赛罗"}, rule=Rule(smart_to_me) & not_private
+)
+shortcut("围棋", ["--rule", "go"], rule=Rule(smart_to_me) & not_private)
 shortcut("停止下棋", ["--stop"], aliases={"结束下棋", "停止游戏", "结束游戏"}, rule=game_running)
 shortcut("查看棋盘", ["--show"], aliases={"查看棋局", "显示棋盘", "显示棋局"}, rule=game_running)
 shortcut("跳过回合", ["--skip"], rule=game_running)
@@ -111,10 +138,6 @@ shortcut("落子", rule=game_running)
 shortcut("重载五子棋棋局", ["--rule", "gomoku", "--reload"], aliases={"恢复五子棋棋局"})
 shortcut("重载黑白棋棋局", ["--rule", "othello", "--reload"], aliases={"恢复黑白棋棋局"})
 shortcut("重载围棋棋局", ["--rule", "go", "--reload"], aliases={"恢复围棋棋局"})
-
-
-def new_player(event: GroupMessageEvent) -> Player:
-    return Player(event.user_id, event.sender.card or event.sender.nickname or "")
 
 
 @dataclass
@@ -151,17 +174,43 @@ def set_timeout(matcher: Matcher, cid: str, timeout: float = 600):
     timers[cid] = timer
 
 
-async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: List[str]):
+async def handle_boardgame(
+    bot: Union[V11Bot, V12Bot],
+    matcher: Matcher,
+    event: Union[V11MEvent, V12MEvent],
+    argv: List[str],
+):
+    async def new_player(event: Union[V11MEvent, V12MEvent]) -> Player:
+        user_id = event.get_user_id()
+        user_name = ""
+        if isinstance(event, V11MEvent):
+            user_name = event.sender.card or event.sender.nickname or ""
+        else:
+            assert isinstance(bot, V12Bot)
+            resp = await bot.get_user_info(user_id=user_id)
+            user_name = resp["user_displayname"] or resp["user_name"]
+        return Player(user_id, user_name)
+
     async def send(
         message: Optional[str] = None, image: Optional[bytes] = None
     ) -> NoReturn:
         if not (message or image):
             await matcher.finish()
-        msg = Message()
-        if message:
-            msg.append(message)
-        if image:
-            msg.append(MessageSegment.image(image))
+
+        if isinstance(bot, V11Bot):
+            msg = V11Msg()
+            if message:
+                msg.append(message)
+            if image:
+                msg.append(V11MsgSeg.image(image))
+        else:
+            msg = V12Msg()
+            if message:
+                msg.append(message)
+            if image:
+                resp = await bot.upload_file(type="data", name="boardgame", data=image)
+                file_id = resp["file_id"]
+                msg.append(V12MsgSeg.image(file_id))
         await matcher.finish(msg)
 
     try:
@@ -173,7 +222,7 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
 
     options = Options(**vars(args))
 
-    cid = get_cid(event)
+    cid = get_cid(bot, event)
     if not games.get(cid, None):
         if options.stop or options.show or options.repent or options.skip:
             await send("没有正在进行的游戏")
@@ -197,12 +246,17 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
                 await matcher.finish("没有找到被中断的游戏")
             games[cid] = game
             await send(
-                f"游戏发起时间：{game.start_time.strftime('%Y-%m-%d %H:%M:%S')}\n黑方：{game.player_black}\n白方：{game.player_white}\n下一手轮到：{game.player_next}",
+                (
+                    f"游戏发起时间：{game.start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                    f"黑方：{game.player_black}\n"
+                    f"白方：{game.player_white}\n"
+                    f"下一手轮到：{game.player_next}"
+                ),
                 await game.draw(),
             )
 
         game = Game()
-        player = new_player(event)
+        player = await new_player(event)
         if options.white:
             game.player_white = player
         else:
@@ -217,7 +271,7 @@ async def handle_boardgame(matcher: Matcher, event: GroupMessageEvent, argv: Lis
 
     game = games[cid]
     set_timeout(matcher, cid)
-    player = new_player(event)
+    player = await new_player(event)
 
     if options.stop:
         if (not game.player_white or game.player_white != player) and (
