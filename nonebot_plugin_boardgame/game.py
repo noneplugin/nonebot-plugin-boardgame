@@ -9,8 +9,8 @@ from typing import List, Optional
 from nonebot_plugin_htmlrender import html_to_pic
 from nonebot_plugin_datastore import create_session
 
-from .svg import Svg, SvgOptions
 from .model import GameRecord
+from .svg import Svg, SvgOptions
 
 
 class MoveResult(Enum):
@@ -86,10 +86,10 @@ class Game:
         self.allow_skip: bool = allow_skip
         self.allow_repent: bool = allow_repent
 
-        self.id = uuid.uuid4().hex
+        self.id: str = uuid.uuid4().hex
         self.start_time = datetime.now()
         self.update_time = datetime.now()
-        self.is_game_over = False
+        self.is_game_over: bool = False
         self.player_white: Optional[Player] = None
         self.player_black: Optional[Player] = None
 
@@ -163,11 +163,13 @@ class Game:
         self.moveside = history.moveside
 
     async def save_record(self, session_id: str):
-        statement = select(GameRecord).where(GameRecord.id == self.id)
+        statement = select(GameRecord).where(GameRecord.game_id == self.id)
         async with create_session() as session:
             record: Optional[GameRecord] = await session.scalar(statement)
             if not record:
-                record = GameRecord(id=self.id, session_id=session_id, name=self.name)
+                record = GameRecord(
+                    game_id=self.id, session_id=session_id, name=self.name
+                )
             if self.player_black:
                 record.player_black_id = str(self.player_black.id)
                 record.player_black_name = self.player_black.name
@@ -200,7 +202,7 @@ class Game:
             return None
         record = sorted(records, key=lambda x: x.update_time)[-1]
         game = cls()
-        game.id = record.id
+        game.id = record.game_id
         game.player_black = load_player(
             record.player_black_id, record.player_black_name
         )
@@ -209,7 +211,7 @@ class Game:
         )
         game.start_time = record.start_time
         game.update_time = record.update_time
-        positions = [Pos.from_str(pos) for pos in record.positions.split(" ")]
+        positions = [Pos.from_str(pos) for pos in record.positions.split(" ") if pos]
         for pos in positions:
             game.update(pos)
         return game

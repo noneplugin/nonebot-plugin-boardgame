@@ -1,12 +1,17 @@
+from sqlmodel import Field
+from typing import Optional
 from datetime import datetime
-from sqlmodel import Field, SQLModel
+
+from nonebot_plugin_datastore import get_plugin_data
+
+Model = get_plugin_data().Model
 
 
-class GameRecord(SQLModel, table=True):
-    __tablename__: str = "boardgame_record"
+class GameRecord(Model, table=True):
     __table_args__ = {"extend_existing": True}
 
-    id: str = Field(default="", primary_key=True)
+    id: Optional[int] = Field(default=None, primary_key=True)
+    game_id: str
     session_id: str = ""
     name: str = ""
     start_time: datetime = datetime.now()
