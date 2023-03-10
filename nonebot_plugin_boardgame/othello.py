@@ -2,7 +2,6 @@ from typing import Optional
 
 from .game import Game, MoveResult, Placement, Pos
 
-
 delta = ((0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1))
 
 

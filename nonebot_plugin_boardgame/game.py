@@ -1,13 +1,13 @@
 import re
 import uuid
-from enum import Enum
-from sqlmodel import select
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
 from typing import List, Optional
 
-from nonebot_plugin_htmlrender import html_to_pic
 from nonebot_plugin_datastore import create_session
+from nonebot_plugin_htmlrender import html_to_pic
+from sqlalchemy import select
 
 from .model import GameRecord
 from .svg import Svg, SvgOptions
@@ -197,7 +197,7 @@ class Game:
             GameRecord.is_game_over == False,
         )
         async with create_session() as session:
-            records: List[GameRecord] = (await session.exec(statement)).all()  # type: ignore
+            records = (await session.scalars(statement)).all()
         if not records:
             return None
         record = sorted(records, key=lambda x: x.update_time)[-1]

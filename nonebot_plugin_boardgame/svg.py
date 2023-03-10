@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Dict, Union, Optional
+from typing import Dict, List, Optional, Union
 
 Attributes = Dict[str, Union[str, float, bool]]
 
