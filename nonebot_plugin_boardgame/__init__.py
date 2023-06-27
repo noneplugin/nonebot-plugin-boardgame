@@ -2,30 +2,38 @@ import asyncio
 import shlex
 from asyncio import TimerHandle
 from dataclasses import dataclass
-from typing import Dict, List, NoReturn, Optional, Union
+from typing import Dict, List, NoReturn, Optional
 
 from nonebot import on_command, on_shell_command, require
-from nonebot.adapters.onebot.v11 import Bot as V11Bot
-from nonebot.adapters.onebot.v11 import GroupMessageEvent as V11GMEvent
-from nonebot.adapters.onebot.v11 import Message as V11Msg
-from nonebot.adapters.onebot.v11 import MessageEvent as V11MEvent
-from nonebot.adapters.onebot.v11 import MessageSegment as V11MsgSeg
-from nonebot.adapters.onebot.v11 import PrivateMessageEvent as V11PMEvent
-from nonebot.adapters.onebot.v12 import Bot as V12Bot
-from nonebot.adapters.onebot.v12 import ChannelMessageEvent as V12CMEvent
-from nonebot.adapters.onebot.v12 import GroupMessageEvent as V12GMEvent
-from nonebot.adapters.onebot.v12 import Message as V12Msg
-from nonebot.adapters.onebot.v12 import MessageEvent as V12MEvent
-from nonebot.adapters.onebot.v12 import MessageSegment as V12MsgSeg
-from nonebot.adapters.onebot.v12 import PrivateMessageEvent as V12PMEvent
+from nonebot.adapters import Bot, Event, Message
 from nonebot.exception import ParserExit
 from nonebot.matcher import Matcher
 from nonebot.params import CommandArg, CommandStart, EventToMe, ShellCommandArgv
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import ArgumentParser, Rule
 
+require("nonebot_plugin_saa")
+require("nonebot_plugin_session")
+require("nonebot_plugin_userinfo")
 require("nonebot_plugin_datastore")
 require("nonebot_plugin_htmlrender")
+
+from nonebot_plugin_saa import Image, MessageFactory
+from nonebot_plugin_saa import __plugin_meta__ as saa_plugin_meta
+from nonebot_plugin_session import SessionIdType, SessionLevel
+from nonebot_plugin_session import __plugin_meta__ as session_plugin_meta
+from nonebot_plugin_session import extract_session
+from nonebot_plugin_userinfo import __plugin_meta__ as userinfo_plugin_meta
+from nonebot_plugin_userinfo import get_user_info
+
+assert saa_plugin_meta.supported_adapters
+assert session_plugin_meta.supported_adapters
+assert userinfo_plugin_meta.supported_adapters
+supported_adapters = (
+    saa_plugin_meta.supported_adapters
+    & session_plugin_meta.supported_adapters
+    & userinfo_plugin_meta.supported_adapters
+)
 
 from .game import Game, MoveResult, Player, Pos
 from .go import Go
@@ -40,11 +48,14 @@ __plugin_meta__ = PluginMetadata(
         "再发送“落子 字母+数字”下棋，如“落子 A1”;\n"
         "发送“结束下棋”结束当前棋局；发送“显示棋盘”显示当前棋局"
     ),
+    type="application",
+    homepage="https://github.com/noneplugin/nonebot-plugin-boardgame",
+    supported_adapters=supported_adapters,
     extra={
         "unique_name": "boardgame",
         "example": "@小Q 五子棋\n落子 G8\n结束下棋",
         "author": "meetwq <meetwq@gmail.com>",
-        "version": "0.2.1",
+        "version": "0.3.0",
     },
 )
 
@@ -66,9 +77,9 @@ boardgame = on_shell_command("boardgame", parser=parser, block=True, priority=13
 
 @boardgame.handle()
 async def _(
-    bot: Union[V11Bot, V12Bot],
+    bot: Bot,
     matcher: Matcher,
-    event: Union[V11MEvent, V12MEvent],
+    event: Event,
     argv: List[str] = ShellCommandArgv(),
 ):
     await handle_boardgame(bot, matcher, event, argv)
@@ -79,10 +90,10 @@ def shortcut(cmd: str, argv: List[str] = [], **kwargs):
 
     @command.handle()
     async def _(
-        bot: Union[V11Bot, V12Bot],
+        bot: Bot,
         matcher: Matcher,
-        event: Union[V11MEvent, V12MEvent],
-        msg: Union[V11Msg, V12Msg] = CommandArg(),
+        event: Event,
+        msg: Message = CommandArg(),
     ):
         try:
             args = shlex.split(msg.extract_plain_text().strip())
@@ -91,25 +102,11 @@ def shortcut(cmd: str, argv: List[str] = [], **kwargs):
         await handle_boardgame(bot, matcher, event, argv + args)
 
 
-def get_cid(bot: Union[V11Bot, V12Bot], event: Union[V11MEvent, V12MEvent]):
-    if isinstance(event, V11MEvent):
-        cid = f"{bot.self_id}_{event.sub_type}_"
-    else:
-        cid = f"{bot.self_id}_{event.detail_type}_"
-
-    if isinstance(event, V11GMEvent) or isinstance(event, V12GMEvent):
-        cid += str(event.group_id)
-    elif isinstance(event, V12CMEvent):
-        cid += f"{event.guild_id}_{event.channel_id}"
-    else:
-        cid += str(event.user_id)
-
-    return cid
+def get_cid(bot: Bot, event: Event):
+    return extract_session(bot, event).get_id(SessionIdType.GROUP)
 
 
-def game_running(
-    bot: Union[V11Bot, V12Bot], event: Union[V11MEvent, V12MEvent]
-) -> bool:
+def game_running(bot: Bot, event: Event) -> bool:
     cid = get_cid(bot, event)
     return bool(games.get(cid, None))
 
@@ -119,8 +116,11 @@ def smart_to_me(command_start: str = CommandStart(), to_me: bool = EventToMe()) 
     return bool(command_start) or to_me
 
 
-def not_private(event: Union[V11MEvent, V12MEvent]) -> bool:
-    return not (isinstance(event, V11PMEvent) or isinstance(event, V12PMEvent))
+def not_private(bot: Bot, event: Event) -> bool:
+    return extract_session(bot, event).level not in (
+        SessionLevel.LEVEL0,
+        SessionLevel.LEVEL1,
+    )
 
 
 shortcut("五子棋", ["--rule", "gomoku"], rule=Rule(smart_to_me) & not_private)
@@ -173,20 +173,16 @@ def set_timeout(matcher: Matcher, cid: str, timeout: float = 600):
 
 
 async def handle_boardgame(
-    bot: Union[V11Bot, V12Bot],
+    bot: Bot,
     matcher: Matcher,
-    event: Union[V11MEvent, V12MEvent],
+    event: Event,
     argv: List[str],
 ):
-    async def new_player(event: Union[V11MEvent, V12MEvent]) -> Player:
+    async def new_player(event: Event) -> Player:
         user_id = event.get_user_id()
         user_name = ""
-        if isinstance(event, V11MEvent):
-            user_name = event.sender.card or event.sender.nickname or ""
-        else:
-            assert isinstance(bot, V12Bot)
-            resp = await bot.get_user_info(user_id=user_id)
-            user_name = resp["user_displayname"] or resp["user_name"]
+        if user_info := await get_user_info(bot, event, user_id=user_id):
+            user_name = user_info.user_name
         return Player(user_id, user_name)
 
     async def send(
@@ -195,21 +191,15 @@ async def handle_boardgame(
         if not (message or image):
             await matcher.finish()
 
-        if isinstance(bot, V11Bot):
-            msg = V11Msg()
-            if message:
-                msg.append(message)
+        msg_builder = MessageFactory([])
+        if message:
             if image:
-                msg.append(V11MsgSeg.image(image))
-        else:
-            msg = V12Msg()
-            if message:
-                msg.append(message)
-            if image:
-                resp = await bot.upload_file(type="data", name="boardgame", data=image)
-                file_id = resp["file_id"]
-                msg.append(V12MsgSeg.image(file_id))
-        await matcher.finish(msg)
+                message += "\n"
+            msg_builder.append(message)
+        if image:
+            msg_builder.append(Image(image))
+        await msg_builder.send()
+        await matcher.finish()
 
     try:
         args = parser.parse_args(argv)

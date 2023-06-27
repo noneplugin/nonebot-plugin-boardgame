@@ -211,7 +211,9 @@ class Game:
         )
         game.start_time = record.start_time
         game.update_time = record.update_time
-        positions = [Pos.from_str(pos) for pos in record.positions.split(" ") if pos]
+        positions = [
+            Pos.from_str(pos) for pos in str(record.positions).split(" ") if pos
+        ]
         for pos in positions:
             game.update(pos)
         return game
