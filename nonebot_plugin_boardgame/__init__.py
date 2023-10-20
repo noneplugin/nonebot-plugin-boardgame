@@ -22,6 +22,7 @@ from nonebot_plugin_saa import Image, MessageFactory
 from nonebot_plugin_session import SessionIdType, SessionLevel, extract_session
 from nonebot_plugin_userinfo import get_user_info
 
+from . import migrations
 from .game import Game, MoveResult, Player, Pos
 from .go import Go
 from .gomoku import Gomoku
@@ -44,7 +45,8 @@ __plugin_meta__ = PluginMetadata(
         "unique_name": "boardgame",
         "example": "@小Q 五子棋\n落子 G8\n结束下棋",
         "author": "meetwq <meetwq@gmail.com>",
-        "version": "0.3.2",
+        "version": "0.3.3",
+        "orm_version_location": migrations,
     },
 )
 
