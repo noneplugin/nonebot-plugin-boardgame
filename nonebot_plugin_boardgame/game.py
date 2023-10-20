@@ -5,8 +5,8 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from nonebot_plugin_datastore import create_session
 from nonebot_plugin_htmlrender import html_to_pic
+from nonebot_plugin_orm import get_session
 from sqlalchemy import select
 
 from .model import GameRecord
@@ -164,12 +164,13 @@ class Game:
 
     async def save_record(self, session_id: str):
         statement = select(GameRecord).where(GameRecord.game_id == self.id)
-        async with create_session() as session:
+        async with get_session() as session:
             record: Optional[GameRecord] = await session.scalar(statement)
             if not record:
                 record = GameRecord(
                     game_id=self.id, session_id=session_id, name=self.name
                 )
+
             if self.player_black:
                 record.player_black_id = str(self.player_black.id)
                 record.player_black_name = self.player_black.name
@@ -181,6 +182,7 @@ class Game:
             record.update_time = self.update_time
             record.positions = " ".join((str(pos) for pos in self.positions))
             record.is_game_over = self.is_game_over
+
             session.add(record)
             await session.commit()
 
@@ -191,16 +193,20 @@ class Game:
                 return None
             return Player(id, name)
 
-        statement = select(GameRecord).where(
-            GameRecord.session_id == session_id,
-            GameRecord.name == cls.name,
-            GameRecord.is_game_over == False,
+        statement = (
+            select(GameRecord)
+            .where(
+                GameRecord.session_id == session_id,
+                GameRecord.name == cls.name,
+                GameRecord.is_game_over == False,
+            )
+            .order_by(GameRecord.update_time.desc())
         )
-        async with create_session() as session:
-            records = (await session.scalars(statement)).all()
-        if not records:
+        async with get_session() as session:
+            record = await session.scalar(statement)
+        if not record:
             return None
-        record = sorted(records, key=lambda x: x.update_time)[-1]
+
         game = cls()
         game.id = record.game_id
         game.player_black = load_player(
