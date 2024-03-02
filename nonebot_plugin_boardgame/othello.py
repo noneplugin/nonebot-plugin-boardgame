@@ -22,7 +22,7 @@ class Othello(Game):
 
     def legal(self, pos: Pos, value: int) -> int:
         diff = 0
-        for (dx, dy) in delta:
+        for dx, dy in delta:
             p = Pos(pos.x + dx, pos.y + dy)
             if not self.in_range(p) or self.get(p) != -value:
                 continue
@@ -55,7 +55,10 @@ class Othello(Game):
 
         b_count = total(self.b_board)
         w_count = total(self.w_board)
-        sign = lambda a: 1 if a > 0 else -1 if a < 0 else 0
+
+        def sign(a: int):
+            return 1 if a > 0 else -1 if a < 0 else 0
+
         return MoveResult(sign(b_count - w_count))
 
     def update(self, pos: Pos) -> Optional[MoveResult]:

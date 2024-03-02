@@ -21,7 +21,7 @@ class Go(Game):
             nonlocal found
             found |= self.bit(pos)
             points: List[Pos] = []
-            for (dx, dy) in directions:
+            for dx, dy in directions:
                 p = Pos(pos.x + dx, pos.y + dy)
                 if not self.in_range(p) or (found & self.bit(p)):
                     continue
@@ -44,7 +44,7 @@ class Go(Game):
         self.push(pos)
 
         diff = 0
-        for (dx, dy) in directions:
+        for dx, dy in directions:
             p = Pos(pos.x + dx, pos.y + dy)
             if not self.in_range(p):
                 continue

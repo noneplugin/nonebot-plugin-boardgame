@@ -52,13 +52,7 @@ pip install nonebot_plugin_boardgame
 
 可用选项：
  - `-r RULE`, `--rule RULE`: 规则名
- - `-e`, `--stop`, `--end`: 停止下棋
- - `-v`, `--show`, `--view`: 显示棋盘
- - `--repent`: 悔棋
- - `--skip`: 跳过回合
- - `--reload`: 重新加载已停止的游戏
  - `--white`: 执白，即后手
- - `POSITION`: 落子位置
 
 
 ### 示例

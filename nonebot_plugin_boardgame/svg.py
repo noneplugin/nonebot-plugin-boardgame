@@ -109,11 +109,12 @@ class Svg(Tag):
         self.view: ViewBox = options.view_box or ViewBox(
             0, height * ratio, 0, width * ratio
         )
+        view = self.view
         self.attr(
             {
                 "width": width,
                 "height": height,
-                "viewBox": f"{self.view.left} {self.view.top} {self.view.right} {self.view.bottom}",
+                "viewBox": f"{view.left} {view.top} {view.right} {view.bottom}",
                 "xmlns": "http://www.w3.org/2000/svg",
                 "version": "1.1",
             }

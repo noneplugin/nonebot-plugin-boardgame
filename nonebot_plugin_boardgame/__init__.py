@@ -1,26 +1,35 @@
 import asyncio
-import shlex
 from asyncio import TimerHandle
-from dataclasses import dataclass
-from typing import Dict, List, NoReturn, Optional
+from typing import Dict, Optional, Union
 
-from nonebot import on_command, on_shell_command, require
-from nonebot.adapters import Bot, Event, Message
-from nonebot.exception import ParserExit
+from nonebot import require
+from nonebot.adapters import Event
 from nonebot.matcher import Matcher
-from nonebot.params import CommandArg, CommandStart, EventToMe, ShellCommandArgv
+from nonebot.params import Depends
 from nonebot.plugin import PluginMetadata, inherit_supported_adapters
-from nonebot.rule import ArgumentParser, Rule
+from nonebot.rule import to_me
+from typing_extensions import Annotated
 
-require("nonebot_plugin_saa")
+require("nonebot_plugin_alconna")
 require("nonebot_plugin_session")
 require("nonebot_plugin_userinfo")
 require("nonebot_plugin_orm")
 require("nonebot_plugin_htmlrender")
 
-from nonebot_plugin_saa import Image, MessageFactory
-from nonebot_plugin_session import SessionIdType, SessionLevel, extract_session
-from nonebot_plugin_userinfo import get_user_info
+from nonebot_plugin_alconna import (
+    Alconna,
+    AlconnaQuery,
+    Args,
+    Image,
+    Option,
+    Query,
+    Text,
+    UniMessage,
+    on_alconna,
+    store_true,
+)
+from nonebot_plugin_session import EventSession, SessionId, SessionIdType, SessionLevel
+from nonebot_plugin_userinfo import EventUserInfo, UserInfo
 
 from . import migrations
 from .game import Game, MoveResult, Player, Pos
@@ -39,232 +48,315 @@ __plugin_meta__ = PluginMetadata(
     type="application",
     homepage="https://github.com/noneplugin/nonebot-plugin-boardgame",
     supported_adapters=inherit_supported_adapters(
-        "nonebot_plugin_saa", "nonebot_plugin_session", "nonebot_plugin_userinfo"
+        "nonebot_plugin_alconna", "nonebot_plugin_session", "nonebot_plugin_userinfo"
     ),
     extra={
-        "unique_name": "boardgame",
         "example": "@小Q 五子棋\n落子 G8\n结束下棋",
-        "author": "meetwq <meetwq@gmail.com>",
-        "version": "0.3.3",
         "orm_version_location": migrations,
     },
 )
-
-
-parser = ArgumentParser("boardgame", description="棋类游戏")
-parser.add_argument("-r", "--rule", help="棋局规则")
-group = parser.add_mutually_exclusive_group()
-group.add_argument("-e", "--stop", "--end", action="store_true", help="停止下棋")
-group.add_argument("-v", "--show", "--view", action="store_true", help="显示棋盘")
-group.add_argument("--skip", action="store_true", help="跳过回合")
-group.add_argument("--repent", action="store_true", help="悔棋")
-group.add_argument("--reload", action="store_true", help="重新加载已停止的游戏")
-parser.add_argument("--white", action="store_true", help="后手")
-parser.add_argument("position", nargs="?", help="落子位置")
-
-
-boardgame = on_shell_command("boardgame", parser=parser, block=True, priority=13)
-
-
-@boardgame.handle()
-async def _(
-    bot: Bot,
-    matcher: Matcher,
-    event: Event,
-    argv: List[str] = ShellCommandArgv(),
-):
-    await handle_boardgame(bot, matcher, event, argv)
-
-
-def shortcut(cmd: str, argv: List[str] = [], **kwargs):
-    command = on_command(cmd, **kwargs, block=True, priority=13)
-
-    @command.handle()
-    async def _(
-        bot: Bot,
-        matcher: Matcher,
-        event: Event,
-        msg: Message = CommandArg(),
-    ):
-        try:
-            args = shlex.split(msg.extract_plain_text().strip())
-        except:
-            args = []
-        await handle_boardgame(bot, matcher, event, argv + args)
-
-
-def get_cid(bot: Bot, event: Event):
-    return extract_session(bot, event).get_id(SessionIdType.GROUP)
-
-
-def game_running(bot: Bot, event: Event) -> bool:
-    cid = get_cid(bot, event)
-    return bool(games.get(cid, None))
-
-
-# 命令前缀为空则需要to_me，否则不需要
-def smart_to_me(command_start: str = CommandStart(), to_me: bool = EventToMe()) -> bool:
-    return bool(command_start) or to_me
-
-
-def not_private(bot: Bot, event: Event) -> bool:
-    return extract_session(bot, event).level not in (
-        SessionLevel.LEVEL0,
-        SessionLevel.LEVEL1,
-    )
-
-
-shortcut("五子棋", ["--rule", "gomoku"], rule=Rule(smart_to_me) & not_private)
-shortcut(
-    "黑白棋", ["--rule", "othello"], aliases={"奥赛罗"}, rule=Rule(smart_to_me) & not_private
-)
-shortcut("围棋", ["--rule", "go"], rule=Rule(smart_to_me) & not_private)
-shortcut("停止下棋", ["--stop"], aliases={"结束下棋", "停止游戏", "结束游戏"}, rule=game_running)
-shortcut("查看棋盘", ["--show"], aliases={"查看棋局", "显示棋盘", "显示棋局"}, rule=game_running)
-shortcut("跳过回合", ["--skip"], rule=game_running)
-shortcut("悔棋", ["--repent"], rule=game_running)
-shortcut("落子", rule=game_running)
-shortcut("重载五子棋棋局", ["--rule", "gomoku", "--reload"], aliases={"恢复五子棋棋局"})
-shortcut("重载黑白棋棋局", ["--rule", "othello", "--reload"], aliases={"恢复黑白棋棋局"})
-shortcut("重载围棋棋局", ["--rule", "go", "--reload"], aliases={"恢复围棋棋局"})
-
-
-@dataclass
-class Options:
-    rule: str = ""
-    stop: bool = False
-    show: bool = False
-    skip: bool = False
-    repent: bool = False
-    reload: bool = False
-    white: bool = False
-    position: str = ""
 
 
 games: Dict[str, Game] = {}
 timers: Dict[str, TimerHandle] = {}
 
 
-async def stop_game(matcher: Matcher, cid: str):
-    timers.pop(cid, None)
-    if games.get(cid, None):
-        game = games.pop(cid)
-        await matcher.finish(f"{game.name}下棋超时，游戏结束，可发送“重载{game.name}棋局”继续下棋")
+UserId = Annotated[str, SessionId(SessionIdType.GROUP)]
 
 
-def set_timeout(matcher: Matcher, cid: str, timeout: float = 600):
-    timer = timers.get(cid, None)
-    if timer:
+def game_is_running(user_id: UserId) -> bool:
+    return user_id in games
+
+
+def game_not_running(user_id: UserId) -> bool:
+    return user_id not in games
+
+
+boardgame = on_alconna(
+    Alconna(
+        "boardgame",
+        Option("-r|--rule", Args["rule", str], help_text="棋局规则"),
+        Option("--white", default=False, action=store_true, help_text="执白，即后手"),
+    ),
+    rule=to_me() & game_not_running,
+    use_cmd_start=True,
+    block=True,
+    priority=13,
+)
+
+
+def boardgame_wrapper(slot: Union[int, str], content: Optional[str]) -> str:
+    if slot == "order" and content in ("后手", "执白"):
+        return "--white"
+    return ""
+
+
+boardgame.shortcut(
+    r"五子棋(?P<order>先手|执白|后手|执黑)?",
+    {
+        "prefix": True,
+        "wrapper": boardgame_wrapper,
+        "args": ["--rule", "gomoku", "{order}"],
+    },
+)
+boardgame.shortcut(
+    r"(?:黑白棋|奥赛罗)(?P<order>先手|执白|后手|执黑)?",
+    {
+        "prefix": True,
+        "wrapper": boardgame_wrapper,
+        "args": ["--rule", "othello", "{order}"],
+    },
+)
+boardgame.shortcut(
+    r"围棋(?P<order>先手|执白|后手|执黑)?",
+    {
+        "prefix": True,
+        "wrapper": boardgame_wrapper,
+        "args": ["--rule", "go", "{order}"],
+    },
+)
+
+boardgame_show = on_alconna(
+    "显示棋盘",
+    aliases={"显示棋局", "查看棋盘", "查看棋局"},
+    rule=game_is_running,
+    use_cmd_start=True,
+    block=True,
+    priority=13,
+)
+boardgame_stop = on_alconna(
+    "结束下棋",
+    aliases={"结束游戏", "结束象棋"},
+    rule=game_is_running,
+    use_cmd_start=True,
+    block=True,
+    priority=13,
+)
+boardgame_repent = on_alconna(
+    "悔棋",
+    rule=game_is_running,
+    use_cmd_start=True,
+    block=True,
+    priority=13,
+)
+boardgame_skip = on_alconna(
+    "跳过",
+    aliases={"跳过回合"},
+    rule=game_is_running,
+    use_cmd_start=True,
+    block=True,
+    priority=13,
+)
+
+boardgame_reload = on_alconna(
+    Alconna(
+        "重载棋局",
+        Option("-r|--rule", Args["rule", str], help_text="棋局规则"),
+    ),
+    aliases={"恢复棋局"},
+    rule=game_not_running,
+    use_cmd_start=True,
+    block=True,
+    priority=13,
+)
+
+
+def reload_wrapper(slot: Union[int, str], content: Optional[str]) -> str:
+    if slot == "rule":
+        if content in ("五子棋",):
+            return "gomoku"
+        if content in ("黑白棋", "奥赛罗"):
+            return "othello"
+        if content in ("围棋",):
+            return "go"
+    return ""
+
+
+boardgame_reload.shortcut(
+    r"(?:重载|恢复)(?P<rule>五子棋|黑白棋|奥赛罗|围棋)棋局",
+    {
+        "prefix": True,
+        "wrapper": reload_wrapper,
+        "args": ["--rule", "{rule}"],
+    },
+)
+
+boardgame_position = on_alconna(
+    Alconna("落子", Args["position", str]),
+    rule=game_is_running,
+    use_cmd_start=True,
+    block=True,
+    priority=14,
+)
+
+
+def stop_game(user_id: str):
+    if timer := timers.pop(user_id, None):
+        timer.cancel()
+    games.pop(user_id, None)
+
+
+async def stop_game_timeout(matcher: Matcher, user_id: str):
+    game = games.get(user_id, None)
+    stop_game(user_id)
+    if game:
+        msg = f"{game.name}下棋超时，游戏结束，可发送“重载{game.name}棋局”继续下棋"
+        await matcher.finish(msg)
+
+
+def set_timeout(matcher: Matcher, user_id: str, timeout: float = 600):
+    if timer := timers.get(user_id, None):
         timer.cancel()
     loop = asyncio.get_running_loop()
     timer = loop.call_later(
-        timeout, lambda: asyncio.ensure_future(stop_game(matcher, cid))
+        timeout, lambda: asyncio.ensure_future(stop_game_timeout(matcher, user_id))
     )
-    timers[cid] = timer
+    timers[user_id] = timer
 
 
-async def handle_boardgame(
-    bot: Bot,
-    matcher: Matcher,
-    event: Event,
-    argv: List[str],
-):
-    async def new_player(event: Event) -> Player:
+def current_player(event: Event, user_info: UserInfo = EventUserInfo()) -> Player:
+    if user_info:
+        user_id = user_info.user_id
+        user_name = user_info.user_displayname or user_info.user_name
+    else:
         user_id = event.get_user_id()
         user_name = ""
-        if user_info := await get_user_info(bot, event, user_id=user_id):
-            user_name = user_info.user_name
-        return Player(user_id, user_name)
+    return Player(user_id, user_name)
 
-    async def send(
-        message: Optional[str] = None, image: Optional[bytes] = None
-    ) -> NoReturn:
-        if not (message or image):
-            await matcher.finish()
 
-        msg_builder = MessageFactory([])
-        if message:
-            if image:
-                message += "\n"
-            msg_builder.append(message)
-        if image:
-            msg_builder.append(Image(image))
-        await msg_builder.send()
-        await matcher.finish()
+CurrentPlayer = Annotated[Player, Depends(current_player)]
 
-    try:
-        args = parser.parse_args(argv)
-    except ParserExit as e:
-        if e.status == 0:
-            await send(__plugin_meta__.usage)
-        await send()
 
-    options = Options(**vars(args))
+@boardgame.handle()
+async def _(
+    matcher: Matcher,
+    user_id: UserId,
+    session: EventSession,
+    player: CurrentPlayer,
+    rule: Query[str] = AlconnaQuery("rule", ""),
+    white: Query[bool] = AlconnaQuery("white.value", False),
+):
+    if session.level == SessionLevel.LEVEL1:
+        await matcher.finish("棋类游戏暂不支持私聊")
 
-    cid = get_cid(bot, event)
-    if not games.get(cid, None):
-        if options.stop or options.show or options.repent or options.skip:
-            await send("没有正在进行的游戏")
-
-        if not options.rule:
-            await send("@我 + “五子棋”、“黑白棋”、“围棋”开始一局游戏。")
-
-        rule = options.rule
-        if rule in ["go", "围棋"]:
-            Game = Go
-        elif rule in ["gomoku", "五子棋"]:
-            Game = Gomoku
-        elif rule in ["othello", "黑白棋"]:
-            Game = Othello
-        else:
-            await send("没有找到对应的规则，目前支持：围棋(go)、五子棋(gomoku)、黑白棋(othello)")
-
-        if options.reload:
-            game = await Game.load_record(cid)
-            if not game:
-                await matcher.finish("没有找到被中断的游戏")
-            games[cid] = game
-            await send(
-                (
-                    f"游戏发起时间：{game.start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                    f"黑方：{game.player_black}\n"
-                    f"白方：{game.player_white}\n"
-                    f"下一手轮到：{game.player_next}"
-                ),
-                await game.draw(),
-            )
-
-        game = Game()
-        player = await new_player(event)
-        if options.white:
-            game.player_white = player
-        else:
-            game.player_black = player
-
-        games[cid] = game
-        set_timeout(matcher, cid)
-        await game.save_record(cid)
-        await send(
-            f"{player} 发起了游戏 {game.name}！\n发送“落子 字母+数字”下棋，如“落子 A1”", await game.draw()
+    if rule.result == "go":
+        Game = Go
+    elif rule.result == "gomoku":
+        Game = Gomoku
+    elif rule.result == "othello":
+        Game = Othello
+    else:
+        await matcher.finish(
+            "当前支持的规则：go（围棋）、gomoku（五子棋）、othello（黑白棋）"
         )
 
-    game = games[cid]
-    set_timeout(matcher, cid)
-    player = await new_player(event)
+    game = Game()
+    if white.result:
+        game.player_white = player
+    else:
+        game.player_black = player
 
-    if options.stop:
-        if (not game.player_white or game.player_white != player) and (
-            not game.player_black or game.player_black != player
-        ):
-            await send("只有游戏参与者才能结束游戏")
-        game = games.pop(cid)
-        await send(f"游戏已结束，可发送“重载{game.name}棋局”继续下棋")
+    games[user_id] = game
+    set_timeout(matcher, user_id)
+    await game.save_record(user_id)
 
-    if options.show:
-        await send(image=await game.draw())
+    msg = f"{player} 发起了游戏 {game.name}！\n发送“落子 字母+数字”下棋，如“落子 A1”"
+    await (Text(msg) + Image(raw=await game.draw())).send()
 
-    if options.rule:
-        await send("当前有正在进行的游戏，可发送“停止下棋”结束游戏")
+
+@boardgame_show.handle()
+async def _(matcher: Matcher, user_id: UserId):
+    game = games[user_id]
+    set_timeout(matcher, user_id)
+
+    await UniMessage.image(raw=await game.draw()).send()
+
+
+@boardgame_stop.handle()
+async def _(matcher: Matcher, user_id: UserId, player: CurrentPlayer):
+    game = games[user_id]
+
+    if (not game.player_white or game.player_white != player) and (
+        not game.player_black or game.player_black != player
+    ):
+        await matcher.finish("只有游戏参与者才能结束游戏")
+    stop_game(user_id)
+    await matcher.finish(f"游戏已结束，可发送“重载{game.name}棋局”继续下棋")
+
+
+@boardgame_repent.handle()
+async def _(matcher: Matcher, user_id: UserId, player: CurrentPlayer):
+    game = games[user_id]
+    set_timeout(matcher, user_id)
+
+    if len(game.history) <= 1:
+        await matcher.finish("对局尚未开始")
+    if game.player_last and game.player_last != player:
+        await matcher.finish("上一手棋不是你所下")
+    game.pop()
+    await game.save_record(user_id)
+    msg = f"{player} 进行了悔棋"
+    await (Text(msg) + Image(raw=await game.draw())).send()
+
+
+@boardgame_skip.handle()
+async def _(matcher: Matcher, user_id: UserId, player: CurrentPlayer):
+    game = games[user_id]
+    set_timeout(matcher, user_id)
+
+    if not game.allow_skip:
+        await matcher.finish("当前游戏不允许跳过回合")
+    if game.player_next and game.player_next != player:
+        await matcher.finish("当前不是你的回合")
+    game.update(Pos.null())
+    await game.save_record(user_id)
+    msg = f"{player} 选择跳过其回合"
+    if game.player_next:
+        msg += f"，下一手轮到 {game.player_next}"
+    await (Text(msg) + Image(raw=await game.draw())).send()
+
+
+@boardgame_reload.handle()
+async def _(
+    matcher: Matcher,
+    user_id: UserId,
+    rule: Query[str] = AlconnaQuery("rule", ""),
+):
+    if rule.result == "go":
+        Game = Go
+    elif rule.result == "gomoku":
+        Game = Gomoku
+    elif rule.result == "othello":
+        Game = Othello
+    else:
+        await matcher.finish(
+            "当前支持的规则：go（围棋）、gomoku（五子棋）、othello（黑白棋）"
+        )
+
+    game = await Game.load_record(user_id)
+    if not game:
+        await matcher.finish("没有找到被中断的游戏")
+    games[user_id] = game
+    set_timeout(matcher, user_id)
+
+    msg = (
+        f"游戏发起时间：{game.start_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"黑方：{game.player_black}\n"
+        f"白方：{game.player_white}\n"
+        f"下一手轮到：{game.player_next}"
+    )
+    await (Text(msg) + Image(raw=await game.draw())).send()
+
+
+@boardgame_position.handle()
+async def _(
+    matcher: Matcher,
+    user_id: UserId,
+    player: CurrentPlayer,
+    position: Query[str] = AlconnaQuery("position", ""),
+):
+    game = games[user_id]
+    set_timeout(matcher, user_id)
 
     if (
         game.player_black
@@ -272,78 +364,56 @@ async def handle_boardgame(
         and game.player_black != player
         and game.player_white != player
     ):
-        await send("游戏已经开始，无法加入")
-
-    if options.skip:
-        if not game.allow_skip:
-            await send("当前游戏不允许跳过回合")
-        if game.player_next and game.player_next != player:
-            await send("当前不是你的回合")
-        game.update(Pos.null())
-        await game.save_record(cid)
-        msg = f"{player} 选择跳过其回合"
-        if game.player_next:
-            msg += f"，下一手轮到 {game.player_next}"
-        await send(msg)
-
-    if options.repent:
-        if len(game.history) <= 1:
-            await matcher.finish("对局尚未开始")
-        if game.player_last and game.player_last != player:
-            await send("上一手棋不是你所下")
-        game.pop()
-        await game.save_record(cid)
-        await send(f"{player} 进行了悔棋", await game.draw())
+        await matcher.finish("游戏已经开始，无法加入")
 
     if (game.player_next and game.player_next != player) or (
         game.player_last and game.player_last == player
     ):
-        await send("当前不是你的回合")
-
-    position = options.position
-    if not position:
-        await send("发送“落子 字母+数字”下棋，如“落子 A1”")
+        await matcher.finish("当前不是你的回合")
 
     try:
-        pos = Pos.from_str(position)
+        pos = Pos.from_str(position.result)
     except ValueError:
-        await send("请发送正确的坐标")
+        await matcher.finish("请发送正确的坐标")
 
     if not game.in_range(pos):
-        await send("落子超出边界")
+        await matcher.finish("落子超出边界")
 
     if game.get(pos):
-        await send("此处已有落子")
+        await matcher.finish("此处已有落子")
 
     try:
         result = game.update(pos)
     except ValueError as e:
-        await send(f"非法落子：{e}")
+        await matcher.finish(f"非法落子：{e}")
 
+    msg = UniMessage()
     if game.player_last:
-        msg = f"{player} 落子于 {position.upper()}"
+        msg += f"{player} 落子于 {pos}"
     else:
         if not game.player_black:
             game.player_black = player
         elif not game.player_white:
             game.player_white = player
-        msg = f"{player} 加入了游戏并落子于 {position.upper()}"
+        msg += f"{player} 加入了游戏并落子于 {pos}"
 
     if result == MoveResult.ILLEGAL:
-        await send("非法落子")
+        await matcher.finish("非法落子")
     elif result == MoveResult.SKIP:
-        msg += f"，下一手依然轮到 {player}"
+        msg += f"，下一手依然轮到 {player}\n"
     elif result:
-        games.pop(cid)
         game.is_game_over = True
+        stop_game(user_id)
         if result == MoveResult.BLACK_WIN:
-            msg += f"，恭喜 {game.player_black} 获胜！"
+            msg += f"，恭喜 {game.player_black} 获胜！\n"
         elif result == MoveResult.WHITE_WIN:
-            msg += f"，恭喜 {game.player_white} 获胜！"
+            msg += f"，恭喜 {game.player_white} 获胜！\n"
         elif result == MoveResult.DRAW:
-            msg += f"，本局游戏平局"
+            msg += "，本局游戏平局\n"
     else:
         if game.player_next:
-            msg += f"，下一手轮到 {game.player_next}"
-    await game.save_record(cid)
-    await send(msg, await game.draw())
+            msg += f"，下一手轮到 {game.player_next}\n"
+    msg += Image(raw=await game.draw())
+
+    await game.save_record(user_id)
+    await msg.send()

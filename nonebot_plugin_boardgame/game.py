@@ -61,7 +61,7 @@ class Pos:
     def __str__(self) -> str:
         if self.x < 0 or self.y < 0:
             return "null"
-        return chr(self.x + ord("a")) + str(self.y + 1)
+        return chr(self.x + ord("A")) + str(self.y + 1)
 
 
 @dataclass
@@ -180,7 +180,7 @@ class Game:
             record.start_time = self.start_time
             self.update_time = datetime.now()
             record.update_time = self.update_time
-            record.positions = " ".join((str(pos) for pos in self.positions))
+            record.positions = " ".join(str(pos) for pos in self.positions)
             record.is_game_over = self.is_game_over
 
             session.add(record)
@@ -198,7 +198,7 @@ class Game:
             .where(
                 GameRecord.session_id == session_id,
                 GameRecord.name == cls.name,
-                GameRecord.is_game_over == False,
+                GameRecord.is_game_over == False,  # noqa
             )
             .order_by(GameRecord.update_time.desc())
         )
