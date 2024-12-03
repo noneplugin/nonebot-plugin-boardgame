@@ -6,6 +6,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 
 class GameRecord(Model):
+    """对局记录"""
+
+    __tablename__ = "nonebot_plugin_boardgame_gamerecord"
+    __table_args__ = {"extend_existing": True}
+
     id: Mapped[int] = mapped_column(primary_key=True)
     game_id: Mapped[str] = mapped_column(String(128))
     session_id: Mapped[str] = mapped_column(String(128))

@@ -12,10 +12,9 @@ repository = "https://github.com/noneplugin/nonebot-plugin-boardgame"
 python = "^3.9"
 nonebot2 = "^2.3.0"
 nonebot-plugin-alconna = ">=0.38.2,<1.0.0"
-nonebot-plugin-session = "^0.3.0"
-nonebot-plugin-userinfo = "^0.2.0"
+nonebot-plugin-uninfo = ">=0.4.0,<1.0.0"
 nonebot-plugin-orm = ">=0.7.0,<1.0.0"
-nonebot-plugin-htmlrender = "^0.3.0"
+nonebot-plugin-htmlrender = "^0.4.0"
 
 [tool.poetry.group.dev.dependencies]
 nonebot-plugin-orm = { version = ">=0.7.0,<1.0.0", extras = ["default"] }
