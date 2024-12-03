@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 from .game import Game, MoveResult, Pos
 
@@ -20,7 +20,7 @@ class Go(Game):
         def find_life(pos: Pos) -> bool:
             nonlocal found
             found |= self.bit(pos)
-            points: List[Pos] = []
+            points: list[Pos] = []
             for dx, dy in directions:
                 p = Pos(pos.x + dx, pos.y + dy)
                 if not self.in_range(p) or (found & self.bit(p)):

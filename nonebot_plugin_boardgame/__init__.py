@@ -1,6 +1,6 @@
 import asyncio
 from asyncio import TimerHandle
-from typing import Dict, Optional, Union
+from typing import Annotated, Optional, Union
 
 from nonebot import require
 from nonebot.adapters import Event
@@ -8,7 +8,6 @@ from nonebot.matcher import Matcher
 from nonebot.params import Depends
 from nonebot.plugin import PluginMetadata, inherit_supported_adapters
 from nonebot.rule import to_me
-from typing_extensions import Annotated
 
 require("nonebot_plugin_alconna")
 require("nonebot_plugin_session")
@@ -57,8 +56,8 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-games: Dict[str, Game] = {}
-timers: Dict[str, TimerHandle] = {}
+games: dict[str, Game] = {}
+timers: dict[str, TimerHandle] = {}
 
 
 UserId = Annotated[str, SessionId(SessionIdType.GROUP)]

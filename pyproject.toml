@@ -9,8 +9,8 @@ homepage = "https://github.com/noneplugin/nonebot-plugin-boardgame"
 repository = "https://github.com/noneplugin/nonebot-plugin-boardgame"
 
 [tool.poetry.dependencies]
-python = "^3.8"
-nonebot2 = "^2.2.0"
+python = "^3.9"
+nonebot2 = "^2.3.0"
 nonebot-plugin-alconna = ">=0.38.2,<1.0.0"
 nonebot-plugin-session = "^0.3.0"
 nonebot-plugin-userinfo = "^0.2.0"
@@ -21,13 +21,13 @@ nonebot-plugin-htmlrender = "^0.3.0"
 nonebot-plugin-orm = { version = ">=0.7.0,<1.0.0", extras = ["default"] }
 
 [tool.pyright]
-pythonVersion = "3.8"
+pythonVersion = "3.9"
 pythonPlatform = "All"
 typeCheckingMode = "basic"
 
 [tool.ruff]
 line-length = 88
-target-version = "py38"
+target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "UP", "C", "T", "PYI", "PT", "Q"]

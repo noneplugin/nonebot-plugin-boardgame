@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
-Attributes = Dict[str, Union[str, float, bool]]
+Attributes = dict[str, Union[str, float, bool]]
 
 
 def escape_html(source: str) -> str:
@@ -18,7 +18,7 @@ class Tag:
     def __init__(self, tag: str):
         self.tag = tag
         self.parent: Optional[Tag] = None
-        self.children: List[Tag] = []
+        self.children: list[Tag] = []
         self.attributes: Attributes = {}
         self.inner_text: str = ""
 

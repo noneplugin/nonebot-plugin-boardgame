@@ -3,7 +3,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 from nonebot_plugin_htmlrender import html_to_pic
 from nonebot_plugin_orm import get_session
@@ -95,8 +95,8 @@ class Game:
 
         self.moveside: int = 1
         """1 代表黑方，-1 代表白方"""
-        self.positions: List[Pos] = []
-        self.history: List[History] = []
+        self.positions: list[Pos] = []
+        self.history: list[History] = []
         self.b_board: int = 0
         self.w_board: int = 0
         self.area: int = self.size * self.size
